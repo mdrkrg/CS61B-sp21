@@ -10,15 +10,30 @@ public class Main {
      */
     public static void main(String[] args) {
         // TODO: what if args is empty?
+        ErrorHandler.handleNoCommand(args);
+        commandSelector(args);
+    }
+
+    private static void commandSelector(String[] args) {
         String firstArg = args[0];
+        selectInit(firstArg); // FIXME: This is not clean
+        ErrorHandler.handleGitletNotExist();
         switch(firstArg) {
-            case "init":
-                // TODO: handle the `init` command
-                break;
             case "add":
                 // TODO: handle the `add [filename]` command
                 break;
             // TODO: FILL THE REST IN
+            default:
+                ErrorHandler.handleCommandNotFound();
         }
+    }
+
+    private static void selectInit(String firstArg) {
+        if (!firstArg.equals("init")) {
+            return;
+        }
+        ErrorHandler.handleGitletExist();
+        // TODO: Repository.initGitlet();
+        System.exit(0);
     }
 }

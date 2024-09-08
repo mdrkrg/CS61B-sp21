@@ -27,11 +27,26 @@ TESTER_FLAGS =
 
 RMAKE = "$(MAKE)"
 
+JARFILE = main.jar
+JARFLAGS = cvfe
+CLASSES := $(PACKAGE)/*.class
+ENTRYPOINT = gitlet.Main
+
+EXEC = gitlet.exe
+SHEBANG = "\#!/usr/bin/env -S java -jar"
+
 # Targets that don't correspond to files, but are to be treated as commands.
-.PHONY: default check clean
+.PHONY: default check clean executable
 
 default:
 	$(RMAKE) -C $(PACKAGE) default
+
+executable:
+	jar $(JARFLAGS) $(JARFILE) $(ENTRYPOINT) $(CLASSES)
+	echo $(SHEBANG) > $(EXEC)
+	cat $(JARFILE) >> $(EXEC)
+	rm -f $(JARFILE)
+	chmod +x $(EXEC)
 
 check: default
 	$(RMAKE) -C testing PYTHON=$(PYTHON) TESTER_FLAGS="$(TESTER_FLAGS)" check
