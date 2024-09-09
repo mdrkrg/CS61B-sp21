@@ -1,5 +1,7 @@
 package gitlet;
 
+import java.lang.Exception;
+
 class ErrorHandler {
     private static String ERR_NOCMD_MSG     = "Please enter a command.";
     private static String ERR_CMD_MSG      = "No command with that name exists.";
@@ -11,6 +13,17 @@ class ErrorHandler {
         System.exit(0);
     }
 
+    static void handleJavaException(Exception e) {
+        exitWithMessage(e.getMessage());
+    }
+
+    static void handleGitletException(GitletException e) {
+        String msg = e.getMessage();
+        if (msg.isEmpty()) {
+            exitWithMessage("Unknown GitletException.");
+        }
+        exitWithMessage(msg);
+    }
     static void handleNoCommand(String[] args) {
         if (args.length == 0) {
             exitWithMessage(ERR_NOCMD_MSG);

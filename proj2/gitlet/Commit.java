@@ -4,6 +4,7 @@ package gitlet;
 import java.util.Date;
 import java.util.Map;
 import java.util.HashMap;
+import java.io.Serializable;
 
 // TODO: Should we use a new class for merged commits? (with two parents)
 
@@ -32,15 +33,21 @@ public abstract class Commit implements Serializable {
     protected String sha1;
     /** Parent(s) of the commit */
     protected FinishedCommit parent;
+    /** Branch of the commit */
+    // TODO: Branching: One branch for one commit, easier to maintain
+    protected String branch;
 }
 
 /** A Commit that is being staged
  *  Every call to gitlet add will call addToStage
  */
-public class StagedCommit extends Commit {
-    public StagedCommit(FinishedCommit parent) {
-        blobs = (Map) new HashMap<String, Blob>();
+class StagedCommit extends Commit {
+    // TODO: Branching
+    protected StagedCommit(FinishedCommit parent) {
+        this.blobs  = new HashMap<>();
         this.parent = parent;
+        this.branch = "staged";
+        this.sha1   = "0000000000000000000000000000000000000000";
     }
 
     public void addToStage(String filename, Blob blob) {
@@ -50,7 +57,7 @@ public class StagedCommit extends Commit {
     }
 
     /** Remove a blob from BLOBS, by its filename.
-     *  @returns true if success, false otherwise
+     *  @return true if success, false otherwise
      */
     public boolean removeFromStage(String filename) {
         boolean success = this.blobs.remove(filename) != null;
@@ -64,22 +71,29 @@ public class StagedCommit extends Commit {
 /** A Commit that will not be changed.
  *  Created on `gitlet commit`
  */
-public class FinishedCommit extends Commit {
+class FinishedCommit extends Commit {
     /** The message of this Commit. */
     private String message;
     /** The timestamp of this Commit. */
     private Date timestamp;
 
-    private FinishedCommit(Commit staged, String message, Date timestamp) {
+    protected FinishedCommit(Commit staged, String branch, String message, Date timestamp) {
         this.blobs = staged.blobs;
         this.parent = staged.parent;
+        this.branch = branch;
         this.message = message;
         this.timestamp = timestamp;
-        this.sha1 = Utils.sha1(this.message, this.timestamp, this.blobs);
+        this.sha1 = Utils.sha1(Utils.serialize((Serializable) this.blobs));
     }
 
-    public static fromStaged(StagedCommit staged, String message, Date timestamp) {
-        return new FinishedCommit((Commit) staged, message, timestamp);
+    public static FinishedCommit fromStaged(StagedCommit staged, String branch, String message, Date timestamp) {
+        return new FinishedCommit(staged, branch, message, timestamp);
+    }
+
+    // TODO: Handle branch, create an identical parent with different message,
+    //       and point the branched children to the new identical one.
+    public StagedCommit createStage() {
+        return new StagedCommit(this);
     }
 
     public void setCommitMessage(String message) {
@@ -99,32 +113,45 @@ public class FinishedCommit extends Commit {
     }
 
     public final String getSha1() {
-        return this.Sha1;
+        return this.sha1;
     }
 
     @Override
     public final String toString() {
         // TODO:
+        return "";
     }
 
     public final void printCommitMessage() {
         // TODO:
     }
+
 }
 
-public class StagedMergedCommit extends StagedCommit {
-    protected FinishedCommit mergedParent;
+// TODO: Improve class structure
+class InitialCommit {
+    private static final Date   INIT_TIMESTAMP = new Date(0);
+    private static final String INIT_MESSAGE   = "initial commit";
+    private static final String DEFAULT_BRANCH = "master";
 
-    public StagedMergedCommit(FinishedCommit mergedParent) {
-        this.mergedParent = mergedParent;
+    public static FinishedCommit create() {
+        return FinishedCommit.fromStaged(new StagedCommit(null), DEFAULT_BRANCH, INIT_MESSAGE, INIT_TIMESTAMP);
     }
 }
 
-public class FinishedMergedCommit extends FinishedCommit {
-    protected FinishedCommit mergedParent;
-
-    public FinishedMergedCommit(StagedMergedCommit staged, String message, Date timestamp) {
-        super((StagedCommit) staged, message, timestamp);
-        this.mergedParent = staged.mergedParent;
-    }
-}
+// class StagedMergedCommit extends StagedCommit {
+//     protected FinishedCommit mergedParent;
+//
+//     public StagedMergedCommit(FinishedCommit mergedParent) {
+//         this.mergedParent = mergedParent;
+//     }
+// }
+//
+// public class FinishedMergedCommit extends FinishedCommit {
+//     protected FinishedCommit mergedParent;
+//
+//     public FinishedMergedCommit(StagedMergedCommit staged, String message, Date timestamp) {
+//         super((StagedCommit) staged, message, timestamp);
+//         this.mergedParent = staged.mergedParent;
+//     }
+// }

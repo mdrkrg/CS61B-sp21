@@ -34,6 +34,7 @@ public class Main {
         }
         ErrorHandler.handleGitletExist();
         // TODO: Repository.initGitlet();
+        Command.init();
         System.exit(0);
     }
 }
