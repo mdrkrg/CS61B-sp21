@@ -3,6 +3,7 @@ package gitlet;
 import java.io.File;
 import java.io.IOException;
 import static gitlet.Utils.*;
+import gitlet.FinishedCommit;
 
 // TODO: any imports you need here
 
