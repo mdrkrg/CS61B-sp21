@@ -20,7 +20,7 @@ import java.io.Serializable;
  *  @see Blob
  *  @author TODO
  */
-public abstract class Commit implements Serializable {
+public class Commit implements Serializable {
     /**
      * List all instance variables of the Commit class here with a useful
      * comment above them describing what that variable represents and how that
@@ -28,14 +28,118 @@ public abstract class Commit implements Serializable {
      */
 
     /** The name-blob pairs in this Commit. */
-    protected Map<String, Blob> blobs;
+    private Map<String, Blob> blobs;
     /** The sha1 of this Commit. */
-    protected String sha1;
+    private String sha1;
     /** Parent(s) of the commit */
-    protected FinishedCommit parent;
+    private Commit parent;
+    /** The message of this Commit. */
+    private String message;
+    /** The timestamp of this Commit. */
+    private Date timestamp;
     /** Branch of the commit */
     // TODO: Branching: One branch for one commit, easier to maintain
-    protected String branch;
+    private String branch;
+
+    private boolean staged;
+
+    private static final Date   INIT_TIMESTAMP = new Date(0);
+    private static final String INIT_MESSAGE   = "initial commit";
+
+    /** For creating Staged Commit */
+    private Commit(Commit parent) {
+        this.blobs  = new HashMap<>();
+        this.parent = parent;
+        this.branch = "staged";
+        this.sha1   = "0000000000000000000000000000000000000000";
+        this.staged = true;
+    }
+
+    private Commit(Commit staged, String branch, String message, Date timestamp) {
+        this.blobs = staged.blobs;
+        this.parent = staged.parent;
+        this.branch = branch;
+        this.message = message;
+        this.timestamp = timestamp;
+        this.sha1 = Utils.sha1(Utils.serialize((Serializable) this.blobs), this.message);
+        this.staged = false;
+    }
+
+    /** Create a Commit that is being staged
+     *  Every call to gitlet add will call addToStage
+     */
+    // TODO: Handle branch, create an identical parent with different message,
+    //       and point the branched children to the new identical one.
+    public static Commit createStagedCommit(Commit parent) {
+        return new Commit(parent);
+    }
+
+    /** Create a Commit that will not be changed.
+     *  Created on `gitlet commit`
+     */
+    public static Commit finishCommit(Commit staged, String branch, String message, Date timestamp) {
+        return new Commit(staged, branch, message, timestamp);
+    }
+
+
+    public static Commit createInitCommit() {
+        return Commit.finishCommit(new Commit(null), Repository.DEFAULT_BRANCH, INIT_MESSAGE, INIT_TIMESTAMP);
+    }
+
+    public void addToStage(String filename, Blob blob) {
+        assert this.staged;
+        // TODO: putIfAbsent? What if we have one in unstaged and same filename in staged?
+        this.blobs.put(filename, blob);
+        this.sha1 = Utils.sha1(this.blobs);
+    }
+
+    /** Remove a blob from BLOBS, by its filename.
+     *  @return true if success, false otherwise
+     */
+    public boolean removeFromStage(String filename) {
+        assert this.staged;
+        boolean success = this.blobs.remove(filename) != null;
+        if (success) {
+            this.sha1 = Utils.sha1(this.blobs);
+        }
+        return success;
+    }
+
+    public final boolean isStaged() {
+        return this.staged;
+    }
+
+    public final String getBranch() {
+        return this.branch;
+    }
+
+    public final Commit getParent() {
+        return this.parent;
+    }
+
+    public final String getMessage() {
+        assert !this.staged;
+        return this.message;
+    }
+
+    public final Date getTimestamp() {
+        assert !this.staged;
+        return this.timestamp;
+    }
+
+    public final String getSha1() {
+        return this.sha1;
+    }
+
+    @Override
+    public final String toString() {
+        // TODO:
+        return "";
+    }
+
+    public final void printCommitMessage() {
+        // TODO:
+    }
 }
 
 // class StagedMergedCommit extends StagedCommit {
