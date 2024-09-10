@@ -3,6 +3,7 @@ package gitlet;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+
 import static gitlet.Utils.*;
 
 // TODO: any imports you need here
@@ -37,7 +38,7 @@ public class Repository {
     public static final File REFS_HEADS_DIR      = join(GITLET_DIR, "refs", "heads");
 
     public static final String DEFAULT_BRANCH = "master";
-    public static final String REFS_HEADS_PATH_STRING = "refs/heads";
+    public static final String REFS_HEADS_PATH_STRING = "refs/heads/";
 
     /* TODO: fill in the rest of this class. */
 
@@ -54,6 +55,24 @@ public class Repository {
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         }
+    }
+
+    public static String getBranch() throws GitletException {
+        if (!ROOT_HEAD_FILE.exists()) {
+            throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
+        }
+        final String rootContent = Utils.readContentsAsString(ROOT_HEAD_FILE);
+        // final String[] tokens = rootContent.split("/");
+        // assert tokens.length == 3;
+        String branch = rootContent.substring(rootContent.lastIndexOf("/") + 1);
+        return branch;
+    }
+
+    public static Commit getHeadCommit() {
+        // FIXME: This calling chain seems redundent.
+        File commitRefFile = readRootHead();
+        File commitObjectFile = readCommitRef(commitRefFile);
+        return readCommitObject(commitObjectFile);
     }
 
     private static void makeEssentialDir() throws IOException {
@@ -114,17 +133,6 @@ public class Repository {
         final String rootContent = Utils.readContentsAsString(ROOT_HEAD_FILE);
         File refFile = Utils.join(GITLET_DIR, rootContent);
         return refFile;
-    }
-
-    public static String getBranch() throws GitletException {
-        if (!ROOT_HEAD_FILE.exists()) {
-            throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
-        }
-        final String rootContent = Utils.readContentsAsString(ROOT_HEAD_FILE);
-        // final String[] tokens = rootContent.split("/");
-        // assert tokens.length == 3;
-        String branch = rootContent.substring(rootContent.lastIndexOf("/") + 1);
-        return branch;
     }
 
     /** Write to .gitlet/refs/heads/COMMIT.BRANCH
@@ -195,7 +203,7 @@ public class Repository {
             " ",
             commit.getSha1(),
             " ",
-            commit.getTimestamp().toString(),
+            Long.toString(commit.getTimestamp().getTime()),
             " ",
             commit.getMessage(), // In git, there'll be an indicator
                                  // whether it's a branch or commit

@@ -140,6 +140,14 @@ public class Commit implements Serializable {
     public final void printCommitMessage() {
         // TODO:
     }
+
+    /** This is a method for testing */
+    public final void printCommitInfo() {
+        System.out.printf("Commit %s:\n", this.sha1);
+        System.out.printf("Message:\t%s\n", this.message);
+        System.out.printf("Timestamp:\t%s\n", this.timestamp);
+        System.out.printf("Branch:\t%s\n", this.branch);
+    }
 }
 
 // class StagedMergedCommit extends StagedCommit {
