@@ -84,7 +84,13 @@ public class Commit implements Serializable {
         this.branch = branch;
         this.message = message;
         this.timestamp = timestamp;
-        this.sha1 = Utils.sha1(Utils.serialize((Serializable) this.blobs), this.message);
+        this.sha1 = Utils.sha1(
+                Utils.serialize((Serializable) this.blobs),
+                // TODO: I don't like this shit
+                this.parent != null ? this.parent.getSha1() : "0000000000000000000000000000000000000000",
+                this.message,
+                this.timestamp.toString()
+        );
         this.staged = false;
     }
 
@@ -154,6 +160,11 @@ public class Commit implements Serializable {
             return true;
         }
         return false;
+    }
+
+    public boolean isStageDifferent() {
+        assert this.staged;
+        return !this.added.isEmpty() || !this.removed.isEmpty();
     }
 
     public final boolean isStaged() {

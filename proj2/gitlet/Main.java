@@ -24,8 +24,10 @@ public class Main {
                 Command.testStaged();
                 break;
             case "add":
-                // TODO: handle the `add [filename]` command
                 Command.add(args);
+                break;
+            case "commit":
+                Command.commit(args);
                 break;
             // TODO: FILL THE REST IN
             default:

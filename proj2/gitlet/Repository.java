@@ -3,6 +3,7 @@ package gitlet;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Date;
 
 import static gitlet.Utils.*;
 
@@ -100,6 +101,21 @@ public class Repository {
         }
     }
 
+    static Commit commit(final String message) throws GitletException {
+        Commit staged = getStagedCommit();
+        final String branch = getBranch();
+        if (!staged.isStageDifferent()) {
+            throw new GitletException("No changes added to the commit.");
+        }
+        if (message.isBlank()) {
+            throw new GitletException("Please enter a commit message.");
+        }
+        Commit newCommit = Commit.finishCommit(staged, branch, message, new Date());
+        writeCommitFiles(newCommit);
+        clearStageFile();
+        return newCommit;
+    }
+
     public static String getBranch() throws GitletException {
         if (!ROOT_HEAD_FILE.exists()) {
             throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
@@ -144,17 +160,21 @@ public class Repository {
         ROOT_HEAD_FILE.createNewFile();
     }
 
-    private static Commit makeInitCommit() {
-        Commit initCommit = Commit.createInitCommit();
+    private static void writeCommitFiles(Commit commit) {
         try {
-            writeCommitLog(initCommit);
-            writeCommitRef(initCommit);
-            writeCommitObject(initCommit);
+            writeCommitLog(commit);
+            writeCommitRef(commit);
+            writeCommitObject(commit);
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         } catch (GitletException e) {
             ErrorHandler.handleGitletException(e);
         }
+    }
+
+    private static Commit makeInitCommit() {
+        Commit initCommit = Commit.createInitCommit();
+        writeCommitFiles(initCommit);
         return initCommit;
     }
 
@@ -169,6 +189,10 @@ public class Repository {
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         }
+    }
+
+    private static void clearStageFile() {
+        STAGE_FILE.deleteOnExit();
     }
 
     /** Write to .gitlet/HEAD

@@ -17,6 +17,23 @@ public class Command {
         }
     }
 
+    static void commit(String[] args) {
+        if (args.length > 2) {
+            ErrorHandler.handleInvalidOperands();
+        }
+        String message;
+        if (args.length == 1) {
+            message = "";
+        } else {
+            message = args[1];
+        }
+        try {
+            Repository.commit(message);
+        } catch (GitletException e) {
+            ErrorHandler.handleGitletException(e);
+        }
+    }
+
     static void testHead() {
         System.out.println(Repository.getBranch());
         Commit headCommit = Repository.getHeadCommit();
