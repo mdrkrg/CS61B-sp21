@@ -14,7 +14,11 @@ class ErrorHandler {
     }
 
     static void handleJavaException(Exception e) {
-        exitWithMessage(e.getMessage());
+        String msg = e.getMessage();
+        if (msg.isEmpty()) {
+            exitWithMessage(e.toString());
+        }
+        exitWithMessage(msg);
     }
 
     static void handleGitletException(GitletException e) {

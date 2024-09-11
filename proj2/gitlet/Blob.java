@@ -9,12 +9,17 @@ import java.nio.file.Files;
  *
  */
 public class Blob implements Serializable {
+
     /* The file describer of the blob */
-    private File file;
+    // TODO: Whether it is needed?
+    final private File file;
     /* The file name of the blob */
-    private String filename;
+    // TODO: Whether filename is needed in a blob?
+    final private String filename;
     /* The checksum of the blob */
-    private String sha1;
+    final private String sha1;
+    /* The content of the file */
+    final private byte[] data;
 
     /** Create a blob with given file name
      *
@@ -24,17 +29,37 @@ public class Blob implements Serializable {
         File f = new File(filename);
         if (!f.exists()) {
             // TODO: Read the spec for error message
-            throw new GitletException("File doesn't exists!");
+            throw new GitletException("File does not exist.");
         }
         this.file = f;
         this.filename = filename;
-        this.sha1 = Utils.sha1(file.length(), " ", Files.readAllBytes(file.toPath()));
+        this.data = Files.readAllBytes(f.toPath());
+        this.sha1 = Utils.sha1(Utils.serialize(Files.size(f.toPath())), this.data);
     }
 
     /** Check whether two blobs are equal
      *  @param other - The blob to compare
      */
     public boolean equals(Blob other) {
+        if (other == null) {
+            return false;
+        }
         return this.sha1.equals(other.sha1);
+    }
+
+    public final String getSha1() {
+        return this.sha1;
+    }
+
+    public final String getFilename() {
+        return this.filename;
+    }
+
+    public final byte[] getData() {
+        return this.data;
+    }
+
+    public final File getFile() {
+        return this.file;
     }
 }

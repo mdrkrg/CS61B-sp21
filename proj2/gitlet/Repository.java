@@ -28,6 +28,7 @@ public class Repository {
     /** The .gitlet directory. */
     public static final File GITLET_DIR          = join(CWD, ".gitlet");
     // public static final File BRANCHES_DIR      = join(GITLET_DIR, "branches");
+    public static final File STAGE_FILE          = join(GITLET_DIR, "stage");
     public static final File LOGS_DIR            = join(GITLET_DIR, "logs");
     public static final File LOGS_HEAD_FILE      = join(GITLET_DIR, "logs", "HEAD");
     public static final File LOGS_REFS_DIR       = join(GITLET_DIR, "logs", "refs");
@@ -57,6 +58,48 @@ public class Repository {
         }
     }
 
+    /** Add a file to stage.
+     *
+     *    There're five cases in total that can occur:
+     *    1. File not changed : filename equals, sha1 equals
+     *    2. File changed     : filename equals, sha1 unequals
+     *    3. File renamed     : filename unequals, sha1 equals (how?) (two ops)
+     *      - If you use an iterator to iterate through all entries in
+     *        the blobs and check if sha1 equals, that will be O(n) time
+     *      - Git uses two lists: One deleted, one Added, how to implement?
+     *      - I have a solution
+     *          - first lookup a sha1-filename map
+     *          - then lookup a filename-blob map
+     *    4. File is new      : filename doesn't exist
+     *    5. File deleted     : filename exists, !file.exists()
+     *    6. File changed and renamed??? -> separate to two
+     *
+     *    // WARN: If switch a branch with staged changes,
+     *             the target branch may contain same file as the staged
+     *
+     *  @param filename file to be staged.
+     */
+    static void add(final String filename) {
+        Commit staged = getStagedCommit();
+        try {
+            Blob blob = new Blob(filename);
+            Boolean addSuccessful = staged.addToStage(blob);
+            if (addSuccessful) {
+                writeStageFile(staged);
+            }
+        } catch (GitletException e) {
+            // File not exist in workspace, Case 5 or error
+            boolean removeSuccessful = staged.removeFromStage(filename);
+            if (!removeSuccessful) {
+                // WARN: This is unsure whether to implement this behaviour
+                //       Need to refer to spec if failed.
+                throw new GitletException("File does not exist.");
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
     public static String getBranch() throws GitletException {
         if (!ROOT_HEAD_FILE.exists()) {
             throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
@@ -73,6 +116,17 @@ public class Repository {
         File commitRefFile = readRootHead();
         File commitObjectFile = readCommitRef(commitRefFile);
         return readCommitObject(commitObjectFile);
+    }
+
+    public static Commit getStagedCommit() {
+        Commit staged;
+        if (!STAGE_FILE.exists()) {
+            Commit head = getHeadCommit();
+            staged = Commit.createStagedCommit(head);
+        } else {
+            staged = readCommitObject(STAGE_FILE);
+        }
+        return staged;
     }
 
     private static void makeEssentialDir() throws IOException {
@@ -102,6 +156,19 @@ public class Repository {
             ErrorHandler.handleGitletException(e);
         }
         return initCommit;
+    }
+
+    private static void writeStageFile(Commit stage) {
+        assert stage != null && stage.isStaged();
+
+        try {
+            if (!STAGE_FILE.exists()) {
+                STAGE_FILE.createNewFile();
+            }
+            Utils.writeObject(STAGE_FILE, stage);
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
     }
 
     /** Write to .gitlet/HEAD
@@ -166,6 +233,7 @@ public class Repository {
         return commitObjectFile;
     }
 
+    // WARN: The map is not necessarily right, considering it stores addresses.
     private static Commit readCommitObject(File commitObjectFile) throws GitletException {
         if (!commitObjectFile.exists()) {
             throw new GitletException("Object file refered by commit ref doesn't exist!");

@@ -28,7 +28,7 @@ TESTER_FLAGS =
 RMAKE = "$(MAKE)"
 
 JARFILE = main.jar
-JARFLAGS = cvfe
+JARFLAGS = cfe
 CLASSES := $(PACKAGE)/*.class
 ENTRYPOINT = gitlet.Main
 

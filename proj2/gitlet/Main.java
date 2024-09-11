@@ -19,8 +19,13 @@ public class Main {
         selectInit(firstArg); // FIXME: This is not clean
         ErrorHandler.handleGitletNotExist();
         switch(firstArg) {
+            case "test":
+                Command.testHead();
+                Command.testStaged();
+                break;
             case "add":
                 // TODO: handle the `add [filename]` command
+                Command.add(args);
                 break;
             // TODO: FILL THE REST IN
             default:
