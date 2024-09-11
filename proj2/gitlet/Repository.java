@@ -96,6 +96,7 @@ public class Repository {
                 //       Need to refer to spec if failed.
                 throw new GitletException("File does not exist.");
             }
+            writeStageFile(staged);
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         }
@@ -192,7 +193,7 @@ public class Repository {
     }
 
     private static void clearStageFile() {
-        STAGE_FILE.deleteOnExit();
+        STAGE_FILE.delete();
     }
 
     /** Write to .gitlet/HEAD
