@@ -17,6 +17,18 @@ public class Command {
         }
     }
 
+    static void rm(String[] args) {
+        if (args.length != 2) {
+            ErrorHandler.handleInvalidOperands();
+        }
+        String filename = args[1];
+        try {
+            Repository.remove(filename);
+        } catch (GitletException e) {
+            ErrorHandler.handleGitletException(e);
+        }
+    }
+
     static void commit(String[] args) {
         if (args.length > 2) {
             ErrorHandler.handleInvalidOperands();
@@ -32,6 +44,13 @@ public class Command {
         } catch (GitletException e) {
             ErrorHandler.handleGitletException(e);
         }
+    }
+
+    static void log(String[] args) {
+        if (args.length != 1) {
+            ErrorHandler.handleInvalidOperands();
+        }
+        Repository.log();
     }
 
     static void testHead() {

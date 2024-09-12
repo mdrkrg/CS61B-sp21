@@ -68,9 +68,6 @@ public class Repository {
      *      - If you use an iterator to iterate through all entries in
      *        the blobs and check if sha1 equals, that will be O(n) time
      *      - Git uses two lists: One deleted, one Added, how to implement?
-     *      - I have a solution
-     *          - first lookup a sha1-filename map
-     *          - then lookup a filename-blob map
      *    4. File is new      : filename doesn't exist
      *    5. File deleted     : filename exists, !file.exists()
      *    6. File changed and renamed??? -> separate to two
@@ -90,7 +87,7 @@ public class Repository {
             }
         } catch (GitletException e) {
             // File not exist in workspace, Case 5 or error
-            boolean removeSuccessful = staged.removeFromStage(filename);
+            boolean removeSuccessful = staged.remove(filename);
             if (!removeSuccessful) {
                 // WARN: This is unsure whether to implement this behaviour
                 //       Need to refer to spec if failed.
@@ -99,6 +96,30 @@ public class Repository {
             writeStageFile(staged);
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    /** Remove a file from staged
+     *  If the file is exisiting in workspace, rm it
+     *
+     *  @param filename file to remove from stage
+     */
+    static void remove(final String filename) {
+        Commit staged = getStagedCommit();
+        boolean stageRemoveSuccess = staged.removeFromStage(filename);
+        boolean blobsRemoveSuccess = staged.removeFromBlobs(filename);
+
+        // Hashmap constant time
+        if (blobsRemoveSuccess) {
+            File file = new File(filename);
+            if (file.exists()) {
+                file.delete();
+            }
+        }
+        if (!stageRemoveSuccess && !blobsRemoveSuccess) {
+            throw new GitletException("No reason to remove the file.");
+        } else {
+            writeStageFile(staged);
         }
     }
 
@@ -117,6 +138,15 @@ public class Repository {
         return newCommit;
     }
 
+    static void log() {
+        Commit head = getHeadCommit();
+        while (head != null) {
+            System.out.println("===");
+            head.printCommitInfo();
+            System.out.println();
+            head = head.getParent();
+        }
+    }
     public static String getBranch() throws GitletException {
         if (!ROOT_HEAD_FILE.exists()) {
             throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
@@ -135,6 +165,11 @@ public class Repository {
         return readCommitObject(commitObjectFile);
     }
 
+    /** Get the staged commit from stage file.
+     *
+     *  Runtime: O(N) with stage file of size N
+     *  @return The staged commit
+     */
     public static Commit getStagedCommit() {
         Commit staged;
         if (!STAGE_FILE.exists()) {

@@ -26,8 +26,14 @@ public class Main {
             case "add":
                 Command.add(args);
                 break;
+            case "rm":
+                Command.rm(args);
+                break;
             case "commit":
                 Command.commit(args);
+                break;
+            case "log":
+                Command.log(args);
                 break;
             // TODO: FILL THE REST IN
             default:

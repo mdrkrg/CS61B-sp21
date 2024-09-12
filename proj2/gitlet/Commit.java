@@ -147,19 +147,31 @@ public class Commit implements Serializable {
      *  Add a blob to REMOVED
      *  @return true if success, false otherwise
      */
-    public boolean removeFromStage(String filename) {
+    public boolean remove(String filename) {
+        assert this.staged;
+        boolean success = this.blobs.get(filename) != null;
+        if (success) {
+            this.removed.add(filename);
+            this.added.remove(filename);
+            return true;
+        } else  {
+            return this.added.remove(filename) != null;
+        }
+    }
+
+    public boolean removeFromBlobs(String filename) {
         assert this.staged;
         boolean success = this.blobs.get(filename) != null;
         if (success) {
             this.removed.add(filename);
             return true;
         }
-        success = this.added.get(filename) != null;
-        if (success) {
-            this.added.remove(filename);
-            return true;
-        }
         return false;
+    }
+
+    public boolean removeFromStage(String filename) {
+        assert this.staged;
+        return this.added.remove(filename) != null;
     }
 
     public boolean isStageDifferent() {
@@ -171,6 +183,13 @@ public class Commit implements Serializable {
         return this.staged;
     }
 
+    public final boolean isInAdded(String filename) {
+        return this.added.containsKey(filename);
+    }
+
+    public final boolean isInRemoved(String filename) {
+        return this.removed.contains(filename);
+    }
     public final Blob getBlob(final String filename) {
         return this.blobs.get(filename);
     }
@@ -203,16 +222,11 @@ public class Commit implements Serializable {
         return "";
     }
 
-    public final void printCommitMessage() {
-        // TODO:
-    }
-
     /** This is a method for testing */
     public final void printCommitInfo() {
-        System.out.printf("Commit %s:\n", this.sha1);
-        System.out.printf("Message:\t%s\n", this.message);
-        System.out.printf("Timestamp:\t%s\n", this.timestamp);
-        System.out.printf("Branch:\t%s\n", this.branch);
+        System.out.printf("commit %s\n", this.sha1);
+        System.out.printf("Date: %1$ta %1$tb %1$td %1$tT %1$tY %1$tz\n", this.timestamp);
+        System.out.printf("%s\n", this.message);
     }
 
     public final void printBlobInfo() {
