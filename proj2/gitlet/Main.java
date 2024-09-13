@@ -35,6 +35,15 @@ public class Main {
             case "log":
                 Command.log(args);
                 break;
+            case "branch":
+                Command.branch(args);
+                break;
+            case "checkout":
+                Command.checkout(args);
+                break;
+            case "status":
+                Command.status(args);
+                break;
             // TODO: FILL THE REST IN
             default:
                 ErrorHandler.handleCommandNotFound();

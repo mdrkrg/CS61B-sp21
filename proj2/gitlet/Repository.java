@@ -3,7 +3,7 @@ package gitlet;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Date;
+import java.util.*;
 
 import static gitlet.Utils.*;
 
@@ -40,7 +40,6 @@ public class Repository {
     public static final File REFS_HEADS_DIR      = join(GITLET_DIR, "refs", "heads");
 
     public static final String DEFAULT_BRANCH = "master";
-    public static final String REFS_HEADS_PATH_STRING = "refs/heads/";
 
     /* TODO: fill in the rest of this class. */
 
@@ -125,8 +124,8 @@ public class Repository {
 
     static Commit commit(final String message) throws GitletException {
         Commit staged = getStagedCommit();
-        final String branch = getBranch();
-        if (!staged.isStageDifferent()) {
+        final String branch = getCurrentBranch();
+        if (!staged.hasStagedChanges()) {
             throw new GitletException("No changes added to the commit.");
         }
         if (message.isBlank()) {
@@ -147,7 +146,105 @@ public class Repository {
             head = head.getParent();
         }
     }
-    public static String getBranch() throws GitletException {
+
+    static void createNewBranch(String name) throws GitletException {
+        final File BRANCH_FILE = Utils.join(REFS_HEADS_DIR, name);
+        if (BRANCH_FILE.exists()) {
+            throw new GitletException("A branch with that name already exists.");
+        }
+        try {
+            BRANCH_FILE.createNewFile();
+            String headSha1 = getHeadCommit().getSha1();
+            Utils.writeContents(BRANCH_FILE, headSha1);
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    static void switchToBranch(String name) throws GitletException {
+        String currentBranch = getCurrentBranch();
+        if (name.equals(currentBranch)) {
+            throw new GitletException("No need to checkout the current branch.");
+        }
+
+        final File BRANCH_FILE = Utils.join(REFS_HEADS_DIR, name);
+        if (!BRANCH_FILE.exists()) {
+            throw new GitletException("No such branch exists.");
+        }
+
+        if (hasUnstagedChanges()) {
+            throw new GitletException(
+                "There is an untracked file in the way; delete it, or add and commit it first."
+            );
+        }
+        try {
+            // TODO: Update filesystem
+            updateRootHead(name);
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+
+
+
+
+
+    static void printStatus() {
+        printBranches();
+        Commit staged = getStagedCommit();
+        staged.printStageStatus();
+        printUnstagedChanges();
+    }
+
+    static private void printUnstagedChanges() {
+        SortedMap<String, UnstagedStatus> unstaged = getUnstagedFiles();
+        List<String> newFiles = new ArrayList<>();
+
+        System.out.println("=== Modifications Not Staged For Commit ===");
+        for (Map.Entry<String, UnstagedStatus> entry: unstaged.entrySet()) {
+            String filename = entry.getKey();
+            switch (entry.getValue()) {
+                case NEW:
+                    newFiles.add(filename);
+                    break;
+                case MODIFIED:
+                    System.out.printf("%s (modified)\n", filename);
+                    break;
+                case DELETED:
+                    System.out.printf("%s (deleted)\n", filename);
+                    break;
+            }
+        }
+        System.out.println();
+        System.out.println("=== Untracked Files ===");
+        for (String filename: newFiles) {
+            System.out.println(filename);
+        }
+        System.out.println();
+    }
+
+    static void printBranches() {
+        System.out.println("=== Branches ===");
+        String currentBranch = getCurrentBranch();
+        System.out.printf("*%s\n", currentBranch);
+        List<String> branches = getBranches();
+        for (String branch: branches) {
+            if (!branch.equals(currentBranch)) {
+                System.out.println(branch);
+            }
+        }
+        System.out.println();
+    }
+
+    private static List<String> getBranches() {
+        if (!REFS_HEADS_DIR.exists()) {
+            throw new GitletException("Broken Gitlet Repository!");
+        }
+        return Utils.plainFilenamesIn(REFS_HEADS_DIR);
+    }
+
+    public static String getCurrentBranch() throws GitletException {
         if (!ROOT_HEAD_FILE.exists()) {
             throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
         }
@@ -245,6 +342,7 @@ public class Repository {
      *  @throws IOException - When IO fails
      */
     private static void updateRootHead(String branch) throws IOException {
+        final String REFS_HEADS_PATH_STRING = "refs/heads/";
         ROOT_HEAD_FILE.delete();
         ROOT_HEAD_FILE.createNewFile();
         writeContents(ROOT_HEAD_FILE, REFS_HEADS_PATH_STRING + branch);
@@ -351,5 +449,47 @@ public class Repository {
         }
         OBJECT_FILE.createNewFile();
         Utils.writeObject(OBJECT_FILE, commit);
+    }
+
+    /** Update the working directory with the blobs in the COMMIT
+     *
+     *  @param commit the commit to restore to
+     */
+    private static void restoreToCommit(Commit commit) {
+        List<String> filenames = Utils.plainFilenamesIn(CWD);
+        for (String filename: filenames) {
+            File f = new File(filename);
+            // TODO:
+        }
+    }
+
+    enum UnstagedStatus { DELETED, MODIFIED, NEW }
+    public static SortedMap<String, UnstagedStatus> getUnstagedFiles() {
+        Commit staged = getStagedCommit();
+        List<String> files = plainFilenamesIn(CWD);
+        // TODO: Should construct a Set first, then sort it out
+//        try {
+//            for (String filename: files) {
+//                if (staged.isFileNew(filename)) {
+//                    unstaged.put(filename, UnstagedStatus.NEW);
+//                } else if (staged.isBlobModified(new Blob(filename))) {
+//                    unstaged.put(filename, UnstagedStatus.MODIFIED);
+//                }
+//            }
+//            Set<String> deleted = staged.getAllDeleted(files);
+//            for (String deletedFile: deleted) {
+//                unstaged.put(deletedFile, UnstagedStatus.DELETED);
+//            }
+//        } catch (IOException e) {
+//            ErrorHandler.handleJavaException(e);
+//        }
+        SortedMap<String, UnstagedStatus> unstaged = staged.getUnstaged(files);
+        return unstaged;
+    }
+
+    public static boolean hasUnstagedChanges() {
+        Commit staged = getStagedCommit();
+        List<String> files = plainFilenamesIn(CWD);
+        return staged.hasUnstaged(files);
     }
 }

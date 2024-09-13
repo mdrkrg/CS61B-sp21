@@ -1,26 +1,36 @@
 package gitlet;
 
 // NOTE: I want to replace it with java.time.ZonedDateTime
+
+import java.io.IOException;
 import java.util.Date;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.stream.Collectors;
 import java.io.Serializable;
 
 // TODO: Should we use a new class for merged commits? (with two parents)
 
-/** Represents a gitlet commit object.
+/**
+ * Represents a gitlet commit object.
+ * <p>
+ * A commit object is typically initialized with no parameter.
+ * <p>
+ * It's BLOBS[] should later be filled with blobs at the STAGING stage,
+ * one at a time with a call to addBlob(BLOB).
+ * <p>
+ * When committing changes, it should be called with finalize(MESSAGE, TIME)
  *
- *  A commit object is typically initialized with no parameter.
- *
- *  It's BLOBS[] should later be filled with blobs at the STAGING stage,
- *  one at a time with a call to addBlob(BLOB).
- *
- *  When committing changes, it should be called with finalize(MESSAGE, TIME)
- *
- *  @see Blob
- *  @author TODO
+ * @author TODO
+ * @see Blob
  */
 public class Commit implements Serializable {
     /**
@@ -29,52 +39,70 @@ public class Commit implements Serializable {
      * variable is used. We've provided one example for `message`.
      */
 
-    /** The name-blob pairs in this Commit. */
-    private Map<String, Blob> blobs;
-    /** The name-blob pairs to be added in this Commit. */
-    private Map<String, Blob> added;
-    /** The name to be removed in this Commit. */
-    private Set<String> removed;
-    /** The sha1 of this Commit. */
-    private String sha1;
-    /** Parent(s) of the commit */
+    private static final Date INIT_TIMESTAMP = new Date(0);
+    private static final String INIT_MESSAGE = "initial commit";
+    /**
+     * Parent(s) of the commit
+     */
     private final Commit parent;
-    /** The message of this Commit. */
+    /**
+     * The name-blob pairs in this Commit.
+     */
+    private Map<String, Blob> blobs;
+    /**
+     * The name-blob pairs to be added in this Commit.
+     */
+    private Map<String, Blob> added;
+    /**
+     * The name to be removed in this Commit.
+     */
+    private Set<String> removed;
+    /**
+     * The sha1 of this Commit.
+     */
+    private String sha1;
+    /**
+     * The message of this Commit.
+     */
     private String message;
-    /** The timestamp of this Commit. */
+    /**
+     * The timestamp of this Commit.
+     */
     private Date timestamp;
-    /** Branch of the commit */
+    /**
+     * Branch of the commit
+     */
     // TODO: Branching: One branch for one commit, easier to maintain
     private String branch;
-
     private boolean staged;
 
-    private static final Date   INIT_TIMESTAMP = new Date(0);
-    private static final String INIT_MESSAGE   = "initial commit";
-
-    /** Constructor only as parameters to create init commit */
+    /**
+     * Constructor only as parameters to create init commit
+     */
     private Commit() {
-        this.blobs  = new HashMap<>();
-        this.added   = new HashMap<>();
+        this.blobs = new HashMap<>();
+        this.added = new HashMap<>();
         this.removed = new HashSet<>();
         this.parent = null;
     }
 
-    /** For creating Staged Commit, assume parent non-null */
+    /**
+     * For creating Staged Commit, assume parent non-null
+     */
     private Commit(Commit parent) {
         assert parent != null;
-        this.blobs   = parent.blobs;
-        this.added   = new HashMap<>();
+        this.blobs = parent.blobs;
+        this.added = new HashMap<>();
         this.removed = new HashSet<>();
-        this.parent  = parent;
-        this.branch  = "staged";
-        this.sha1    = "0000000000000000000000000000000000000000";
-        this.staged  = true;
+        this.parent = parent;
+        this.branch = "staged";
+        this.sha1 = "0000000000000000000000000000000000000000";
+        this.staged = true;
     }
 
     private Commit(Commit staged, String branch, String message, Date timestamp) {
         this.blobs = new HashMap<>(staged.blobs);
-        for (String name: staged.removed) {
+        for (String name : staged.removed) {
             this.blobs.remove(name);
         }
         this.blobs.putAll(staged.added);
@@ -94,8 +122,9 @@ public class Commit implements Serializable {
         this.staged = false;
     }
 
-    /** Create a Commit that is being staged
-     *  Every call to gitlet add will call addToStage
+    /**
+     * Create a Commit that is being staged
+     * Every call to gitlet add will call addToStage
      */
     // TODO: Handle branch, create an identical parent with different message,
     //       and point the branched children to the new identical one.
@@ -103,8 +132,9 @@ public class Commit implements Serializable {
         return new Commit(parent);
     }
 
-    /** Create a Commit that will not be changed.
-     *  Created on `gitlet commit`
+    /**
+     * Create a Commit that will not be changed.
+     * Created on `gitlet commit`
      */
     public static Commit finishCommit(Commit staged, String branch, String message, Date timestamp) {
         return new Commit(staged, branch, message, timestamp);
@@ -115,10 +145,11 @@ public class Commit implements Serializable {
         return Commit.finishCommit(new Commit(), Repository.DEFAULT_BRANCH, INIT_MESSAGE, INIT_TIMESTAMP);
     }
 
-    /** Mark one file as to be added
-     *  Add one blob to ADDED
+    /**
+     * Mark one file as to be added
+     * Add one blob to ADDED
      *
-     *  @param blob to be staged
+     * @param blob to be staged
      */
     public boolean addToStage(Blob blob) {
         assert this.staged;
@@ -143,9 +174,11 @@ public class Commit implements Serializable {
         // this.sha1 = Utils.sha1(this.blobs);
     }
 
-    /** Mark a file as to be removed
-     *  Add a blob to REMOVED
-     *  @return true if success, false otherwise
+    /**
+     * Mark a file as to be removed
+     * Add a blob to REMOVED
+     *
+     * @return true if success, false otherwise
      */
     public boolean remove(String filename) {
         assert this.staged;
@@ -154,7 +187,7 @@ public class Commit implements Serializable {
             this.removed.add(filename);
             this.added.remove(filename);
             return true;
-        } else  {
+        } else {
             return this.added.remove(filename) != null;
         }
     }
@@ -174,7 +207,7 @@ public class Commit implements Serializable {
         return this.added.remove(filename) != null;
     }
 
-    public boolean isStageDifferent() {
+    public boolean hasStagedChanges() {
         assert this.staged;
         return !this.added.isEmpty() || !this.removed.isEmpty();
     }
@@ -190,6 +223,171 @@ public class Commit implements Serializable {
     public final boolean isInRemoved(String filename) {
         return this.removed.contains(filename);
     }
+
+    public final boolean isInBlobs(String filename) {
+        return this.blobs.containsKey(filename);
+    }
+
+    /**
+     * Check whether a blob is different from staged
+     * <p>
+     * Runtime: O(1) for hashset and hashmap
+     *
+     * @param blob - the blob to be checked
+     * @return true on different, false otherwise
+     */
+    public final boolean isBlobModified(Blob blob) {
+        String filename = blob.getFilename();
+        Blob added = this.added.get(filename);
+        // first check whether file is staged
+        if (added != null) {
+            // file in staged
+            return !added.equals(blob);
+        }
+        // if not found, check the last commit
+        Blob commited = this.blobs.get(filename);
+        if (commited != null) {
+            // file in last commit
+            return !commited.equals(blob);
+        }
+        return false;
+    }
+
+    /**
+     * Check whether a file is new to staged
+     * Assume the file exists
+     *
+     * @param filename - filename of the file
+     * @return true on new, false otherwise
+     */
+    public final boolean isFileNew(String filename) {
+        return (
+                this.removed.contains(filename)
+                        || (!this.added.containsKey(filename)
+                        && !this.blobs.containsKey(filename))
+        );
+    }
+
+    /**
+     * Get all deleted filenames given a collection of filename
+     *
+     * Runtime: O(N) with all N files in blobs, added and cwd
+     *
+     * @param files - should be the files currently in working dir
+     * @return A set of deleted filenames
+     */
+    public final Set<String> getAllDeleted(Collection<String> files) {
+        Set<String> stagedAndCommitted = new HashSet<>(this.blobs.keySet());
+        stagedAndCommitted.addAll(this.added.keySet());
+        stagedAndCommitted.removeAll(files);
+        return stagedAndCommitted;
+    }
+
+    /**
+     * Given a collection of files, return a set of unstaged files,
+     * with filename mapped to their reason for being unstaged.
+     *
+     * See the design doc with pic for more detail.
+     *
+     * Runtime: Possibly > O(N) with N files
+     *
+     * TODO(PERF): Improve this.
+     *
+     * @param filesInWorkSpace - the collection of files to examine
+     * @return a set of unstaged files mapped to their reason
+     */
+    public final SortedMap<String, Repository.UnstagedStatus> getUnstaged(Collection<String> filesInWorkSpace) {
+        final Set<String> CM = this.blobs.keySet();
+        final Set<String> RM = this.removed;
+        final Set<String> AD = this.added.keySet();
+        // O(1)
+        final Set<String> FS = new HashSet<>(filesInWorkSpace);
+        Set<String> all = new HashSet<>(CM);
+        all.addAll(AD);
+        all.removeAll(RM);
+        SortedMap<String, Repository.UnstagedStatus> unstaged = new TreeMap<>();
+        try {
+            for (String file : FS) {
+                Blob tmp;
+                if ((tmp = this.blobs.get(file)) != null) {
+                    // CM.contains(file)
+                    Blob blob = new Blob(file);
+                    if (!blob.equals(tmp)) {
+                        unstaged.put(file, Repository.UnstagedStatus.MODIFIED);
+                    }
+                } else if ((tmp = this.added.get(file)) != null) {
+                    // AD.contains(file)
+                    Blob blob = new Blob(file);
+                    if (!blob.equals(tmp)) {
+                        unstaged.put(file, Repository.UnstagedStatus.MODIFIED);
+                    }
+                } else if (this.removed.contains(file)) {
+                    // RM.contains(file)
+                    unstaged.put(file, Repository.UnstagedStatus.NEW);
+                } else {
+                    // All other files are new
+                    unstaged.put(file, Repository.UnstagedStatus.NEW);
+                }
+            }
+            for (String fileInStage: all) {
+                // This is where > O(N) can occur
+                if (!FS.contains(fileInStage)) {
+                    unstaged.put(fileInStage, Repository.UnstagedStatus.DELETED);
+                }
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+        return unstaged;
+    }
+
+    /**
+     * Same logic as above, but return true once found
+     */
+    public final boolean hasUnstaged(Collection<String> filesInWorkSpace) {
+        final Set<String> CM = this.blobs.keySet();
+        final Set<String> RM = this.removed;
+        final Set<String> AD = this.added.keySet();
+        // O(1)
+        final Set<String> FS = new HashSet<>(filesInWorkSpace);
+        Set<String> all = new HashSet<>(CM);
+        all.addAll(AD);
+        all.removeAll(RM);
+        try {
+            for (String file : FS) {
+                Blob tmp;
+                if ((tmp = this.blobs.get(file)) != null) {
+                    // CM.contains(file)
+                    Blob blob = new Blob(file);
+                    if (!blob.equals(tmp)) {
+                        return true;
+                    }
+                } else if ((tmp = this.added.get(file)) != null) {
+                    // AD.contains(file)
+                    Blob blob = new Blob(file);
+                    if (!blob.equals(tmp)) {
+                        return true;
+                    }
+                } else if (this.removed.contains(file)) {
+                    // RM.contains(file)
+                    return true;
+                } else {
+                    // All other files are new
+                    return true;
+                }
+            }
+            for (String fileInStage: all) {
+                // This is where > O(N) can occur
+                if (!FS.contains(fileInStage)) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+        return false;
+    }
+
     public final Blob getBlob(final String filename) {
         return this.blobs.get(filename);
     }
@@ -222,7 +420,9 @@ public class Commit implements Serializable {
         return "";
     }
 
-    /** This is a method for testing */
+    /**
+     * This is a method for testing
+     */
     public final void printCommitInfo() {
         System.out.printf("commit %s\n", this.sha1);
         System.out.printf("Date: %1$ta %1$tb %1$td %1$tT %1$tY %1$tz\n", this.timestamp);
@@ -231,17 +431,36 @@ public class Commit implements Serializable {
 
     public final void printBlobInfo() {
         System.out.println("Blobs: ");
-        for (Blob b: this.blobs.values()) {
+        for (Blob b : this.blobs.values()) {
             System.out.println(b.getSha1());
         }
         System.out.println("Added: ");
-        for (Blob b: this.added.values()) {
+        for (Blob b : this.added.values()) {
             System.out.println(b.getSha1());
         }
         System.out.println("Removed: ");
-        for (String s: this.removed) {
+        for (String s : this.removed) {
             System.out.println(s);
         }
+    }
+
+    public final void printStageStatus() {
+        System.out.println("=== Staged Files ===");
+        List<String> addedList =
+                this.added.keySet().stream().sorted()
+                        .collect(Collectors.toList());
+        for (String s: addedList) {
+            System.out.println(s);
+        }
+        System.out.println();
+        System.out.println("=== Removed Files ===");
+        List<String> removedList =
+                this.removed.stream().sorted().
+                        collect(Collectors.toList());
+        for (String s: removedList) {
+            System.out.println(s);
+        }
+        System.out.println();
     }
 }
 
