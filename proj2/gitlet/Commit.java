@@ -171,15 +171,15 @@ public class Commit implements GitletObject {
         assert blob != null;
         String filename = blob.getFilename();
         Blob stagedBlob = this.added.get(filename);
+        String existingSha1 = this.blobs.get(filename);
+        // TODO: Class structure weird
+        Blob existing = existingSha1 != null
+                ? Repository.readBlobObject(existingSha1) : null;
 
         if (stagedBlob == null || !blob.equals(stagedBlob)) {
             // Add only when
             // 1. file not found in stage
             // 2. file not equal staged
-            String existingSha1 = this.blobs.get(filename);
-            // TODO: Class structure weird
-            Blob existing = existingSha1 != null
-                    ? Repository.readBlobObject(existingSha1) : null;
             if (blob.equals(existing)) {
                 // Remove from staged
                 this.added.remove(filename);
@@ -189,8 +189,15 @@ public class Commit implements GitletObject {
             return true;
         }
         return false;
-        // TODO: putIfAbsent? What if we have one in unstaged and same filename in staged?
-        // this.sha1 = Utils.sha1(this.blobs);
+    }
+
+    /**
+     * Readd a file from REMOVED
+     * @param filename - The file to be readded
+     * @return true on success, false on not found in REMOVED
+     */
+    public boolean readdFromRemoved(String filename) {
+        return this.removed.remove(filename);
     }
 
     /**

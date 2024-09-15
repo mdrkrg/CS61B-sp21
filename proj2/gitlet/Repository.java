@@ -68,6 +68,7 @@ public class Repository {
      * 4. File is new      : filename doesn't exist
      * 5. File deleted     : filename exists, !file.exists()
      * 6. File changed and renamed??? -> separate to two
+     * 7. File removed but added again
      * <p>
      * // WARN: If switch a branch with staged changes,
      * the target branch may contain same file as the staged
@@ -84,12 +85,20 @@ public class Repository {
                 writeStageFile(staged);
             }
         } catch (GitletException e) {
-            // File not exist in workspace, Case 5 or error
-            boolean removeSuccessful = staged.removeFromAll(filename);
-            if (!removeSuccessful) {
-                // WARN: This is unsure whether to implement this behaviour
-                //       Need to refer to spec if failed.
-                throw new GitletException("File does not exist.");
+            // File not exist in workspace
+            if (staged.readdFromRemoved(filename)) {
+                // Already in REMOVED
+                // Should restore the file
+                String removedSha1 = staged.getBlobSha1(filename);
+                restoreBlobContent(removedSha1);
+            } else {
+                // Case 5 or error
+                boolean removeSuccessful = staged.removeFromAll(filename);
+                if (!removeSuccessful) {
+                    // WARN: This is unsure whether to implement this behaviour
+                    //       Need to refer to spec if failed.
+                    throw new GitletException("File does not exist.");
+                }
             }
             writeStageFile(staged);
         } catch (IOException e) {
@@ -545,7 +554,7 @@ public class Repository {
      * @param blobSha1 - The sha1 of the blob to restore to
      * @throws GitletException - When there is no blob of that sha1
      */
-    private static void restoreBlobContent(String blobSha1) throws GitletException {
+    public static void restoreBlobContent(String blobSha1) throws GitletException {
         Blob blob = readBlobObject(blobSha1);
         restoreBlobContent(blob);
     }
