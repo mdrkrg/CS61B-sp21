@@ -76,8 +76,8 @@ public class Command {
                         final String fileName = args[2];
                         // Repository.pickFile(fileName);
                         throw new AssertionError("Not Implemented");
-                        // break;
                     }
+                    break;
                 case 4:
                     if (args[2].equals(sep)) {
                         // Continue only when separator fit syntax
@@ -85,8 +85,8 @@ public class Command {
                         final String fileName = args[3];
                         // Repository.pickFile(commitID, fileName);
                         throw new AssertionError("Not Implemented");
-                        // break;
                     }
+                    break;
                 default:
                     ErrorHandler.handleInvalidOperands();
             }

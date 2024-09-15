@@ -2,7 +2,6 @@ package gitlet;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Serializable;
 import java.nio.file.Files;
 
 /**
@@ -11,15 +10,13 @@ import java.nio.file.Files;
 public class Blob implements GitletObject {
 
     /* The file describer of the blob */
-    // TODO: Whether it is needed?
-    final private File file;
+    private final File file;
     /* The file name of the blob */
-    // TODO: Whether filename is needed in a blob?
-    final private String filename;
+    private final String filename;
     /* The checksum of the blob */
-    final private String sha1;
+    private final String sha1;
     /* The content of the file */
-    final private byte[] data;
+    private final byte[] data;
 
     /**
      * Create a blob with given file name
@@ -29,7 +26,6 @@ public class Blob implements GitletObject {
     public Blob(String filename) throws GitletException, IOException {
         File f = new File(filename);
         if (!f.exists()) {
-            // TODO: Read the spec for error message
             throw new GitletException("File does not exist.");
         }
         this.file = f;

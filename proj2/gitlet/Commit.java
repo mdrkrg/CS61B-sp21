@@ -138,7 +138,9 @@ public class Commit implements GitletObject {
      * Create a Commit that will not be changed.
      * Created on `gitlet commit`
      */
-    public static Commit finishCommit(Commit staged, String branch, String message, Date timestamp) {
+    public static Commit finishCommit(
+            Commit staged, String branch, String message, Date timestamp
+    ) {
         return new Commit(staged, branch, message, timestamp);
     }
 
@@ -276,11 +278,11 @@ public class Commit implements GitletObject {
      */
     public final boolean isBlobModified(Blob blob) {
         String filename = blob.getFilename();
-        Blob added = this.added.get(filename);
+        Blob addedBlob = this.added.get(filename);
         // first check whether file is staged
-        if (added != null) {
+        if (addedBlob != null) {
             // file in staged
-            return !added.equals(blob);
+            return !addedBlob.equals(blob);
         }
         // if not found, check the last commit
         String committedSha1 = this.blobs.get(filename);
@@ -343,15 +345,17 @@ public class Commit implements GitletObject {
      * @param filesInWorkSpace - the collection of files to examine
      * @return a set of unstaged files mapped to their reason
      */
-    public final SortedMap<String, Repository.UnstagedStatus> getUnstaged(Collection<String> filesInWorkSpace) {
-        final Set<String> CM = this.blobs.keySet();
-        final Set<String> RM = this.removed;
-        final Set<String> AD = this.added.keySet();
+    public final SortedMap<String, Repository.UnstagedStatus> getUnstaged(
+            Collection<String> filesInWorkSpace
+    ) {
+        final Set<String> C = this.blobs.keySet();
+        final Set<String> R = this.removed;
+        final Set<String> A = this.added.keySet();
         // O(1)
         final Set<String> FS = new HashSet<>(filesInWorkSpace);
-        Set<String> all = new HashSet<>(CM);
-        all.addAll(AD);
-        all.removeAll(RM);
+        Set<String> all = new HashSet<>(C);
+        all.addAll(A);
+        all.removeAll(R);
         SortedMap<String, Repository.UnstagedStatus> unstaged = new TreeMap<>();
         try {
             for (String file : FS) {
@@ -394,14 +398,14 @@ public class Commit implements GitletObject {
      * TODO: Improve algorithm
      */
     public final boolean hasUnstaged(Collection<String> filesInWorkSpace) {
-        final Set<String> CM = this.blobs.keySet();
-        final Set<String> RM = this.removed;
-        final Set<String> AD = this.added.keySet();
+        final Set<String> C = this.blobs.keySet();
+        final Set<String> R = this.removed;
+        final Set<String> A = this.added.keySet();
         // O(1)
         final Set<String> FS = new HashSet<>(filesInWorkSpace);
-        Set<String> all = new HashSet<>(CM);
-        all.addAll(AD);
-        all.removeAll(RM);
+        Set<String> all = new HashSet<>(C);
+        all.addAll(A);
+        all.removeAll(R);
         try {
             for (String file : FS) {
                 String tmpSha1;
@@ -418,9 +422,9 @@ public class Commit implements GitletObject {
                     if (!blob.equals(tmp)) {
                         return true;
                     }
-                } else if (this.removed.contains(file)) {
-                    // RM.contains(file)
-                    return true;
+//                } else if (this.removed.contains(file)) {
+//                    // RM.contains(file)
+//                    return true;
                 } else {
                     // All other files are new
                     return true;
