@@ -95,6 +95,16 @@ public class Command {
         }
     }
 
+    static void switchTo(String[] args) {
+        validateArgCount(args, 2);
+        String branch = args[1];
+        try {
+            Repository.switchToBranch(branch);
+        } catch (GitletException e) {
+            ErrorHandler.handleGitletException(e);
+        }
+    }
+
     static void status(String[] args) {
         validateArgCount(args, 1);
         Repository.printStatus();

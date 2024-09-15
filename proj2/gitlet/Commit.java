@@ -3,17 +3,7 @@ package gitlet;
 // NOTE: I want to replace it with java.time.ZonedDateTime
 
 import java.io.IOException;
-import java.util.Date;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.HashMap;
-import java.util.Set;
-import java.util.HashSet;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.io.Serializable;
 
@@ -32,7 +22,7 @@ import java.io.Serializable;
  * @author TODO
  * @see Blob
  */
-public class Commit implements Serializable {
+public class Commit implements GitletObject {
     /**
      * List all instance variables of the Commit class here with a useful
      * comment above them describing what that variable represents and how that
@@ -46,9 +36,10 @@ public class Commit implements Serializable {
      */
     private final Commit parent;
     /**
-     * The name-blob pairs in this Commit.
+     * The name-blobsha1 pairs in this Commit.
      */
-    private Map<String, Blob> blobs;
+//    private Map<String, Blob> blobs;
+    private Map<String, String> blobs;
     /**
      * The name-blob pairs to be added in this Commit.
      */
@@ -100,14 +91,26 @@ public class Commit implements Serializable {
         this.staged = true;
     }
 
+    /**
+     * Create a new (finished) commit from a staged commit
+     * Runtime: O(N) with N items in STAGED's blobs, added and removed
+     * @param staged - The staged file to construct the commit
+     * @param branch - The branch that the commit belong to
+     * @param message - The commit message of the commit
+     * @param timestamp - The timestamp of the commit
+     */
     private Commit(Commit staged, String branch, String message, Date timestamp) {
         this.blobs = new HashMap<>(staged.blobs);
         for (String name : staged.removed) {
             this.blobs.remove(name);
         }
-        this.blobs.putAll(staged.added);
-        staged.added = null;
-        staged.removed = null;
+//        this.blobs.putAll(staged.added);
+        for (Map.Entry<String, Blob> entry: staged.added.entrySet()) {
+            this.blobs.put(entry.getKey(), entry.getValue().getSha1());
+            // TODO: save blob object to file
+        }
+//        staged.added = null; // NO NEED
+//        staged.removed = null;
         this.parent = staged.parent;
         this.branch = branch;
         this.message = message;
@@ -115,7 +118,9 @@ public class Commit implements Serializable {
         this.sha1 = Utils.sha1(
                 Utils.serialize((Serializable) this.blobs),
                 // TODO: I don't like this shit
-                this.parent != null ? this.parent.getSha1() : "0000000000000000000000000000000000000000",
+                this.parent != null
+                        ? this.parent.getSha1()
+                        : "0000000000000000000000000000000000000000",
                 this.message,
                 this.timestamp.toString()
         );
@@ -141,8 +146,21 @@ public class Commit implements Serializable {
     }
 
 
+    /**
+     * Create the initial commit:
+     * - Branch:    "master"
+     * - Message:   "inital commit"
+     * - Timestamp: Date(0)
+     *
+     * @return The initial commit
+     */
     public static Commit createInitCommit() {
-        return Commit.finishCommit(new Commit(), Repository.DEFAULT_BRANCH, INIT_MESSAGE, INIT_TIMESTAMP);
+        return Commit.finishCommit(
+                new Commit(),
+                Repository.DEFAULT_BRANCH,
+                INIT_MESSAGE,
+                INIT_TIMESTAMP
+        );
     }
 
     /**
@@ -180,7 +198,7 @@ public class Commit implements Serializable {
      *
      * @return true if success, false otherwise
      */
-    public boolean remove(String filename) {
+    public boolean removeFromAll(String filename) {
         assert this.staged;
         boolean success = this.blobs.get(filename) != null;
         if (success) {
@@ -192,7 +210,13 @@ public class Commit implements Serializable {
         }
     }
 
-    public boolean removeFromBlobs(String filename) {
+    /**
+     * Mark a file to be removed from a commit
+     *
+     * @param filename - filename of the file to be removed
+     * @return true on success, false otherwise
+     */
+    public boolean removeFromCommit(String filename) {
         assert this.staged;
         boolean success = this.blobs.get(filename) != null;
         if (success) {
@@ -202,6 +226,12 @@ public class Commit implements Serializable {
         return false;
     }
 
+    /**
+     * Remove a file from staged
+     *
+     * @param filename - filename of the file
+     * @return true on success, false otherwise
+     */
     public boolean removeFromStage(String filename) {
         assert this.staged;
         return this.added.remove(filename) != null;
@@ -245,10 +275,10 @@ public class Commit implements Serializable {
             return !added.equals(blob);
         }
         // if not found, check the last commit
-        Blob commited = this.blobs.get(filename);
-        if (commited != null) {
+        String commitedSha1 = this.blobs.get(filename);
+        if (commitedSha1 != null) {
             // file in last commit
-            return !commited.equals(blob);
+            return !commitedSha1.equals(blob.getSha1());
         }
         return false;
     }
@@ -270,7 +300,7 @@ public class Commit implements Serializable {
 
     /**
      * Get all deleted filenames given a collection of filename
-     *
+     * <p>
      * Runtime: O(N) with all N files in blobs, added and cwd
      *
      * @param files - should be the files currently in working dir
@@ -283,20 +313,37 @@ public class Commit implements Serializable {
         return stagedAndCommitted;
     }
 
+    // This is breaking abstraction?
+    public final Collection<Blob> getAddedBlobs() {
+        return this.added.values();
+    }
+
+    public final Map<String, String> getAllBlobs() {
+        return this.blobs;
+    }
+
     /**
      * Given a collection of files, return a set of unstaged files,
      * with filename mapped to their reason for being unstaged.
-     *
+     * <p>
      * See the design doc with pic for more detail.
-     *
+     * <p>
      * Runtime: Possibly > O(N) with N files
-     *
+     * <p>
      * TODO(PERF): Improve this.
      *
      * @param filesInWorkSpace - the collection of files to examine
      * @return a set of unstaged files mapped to their reason
      */
     public final SortedMap<String, Repository.UnstagedStatus> getUnstaged(Collection<String> filesInWorkSpace) {
+        // FIXME: When a file is both staged and committed,
+        //        gitlet will first compare with that in the committed,
+        //        so even if I added the modification to commit,
+        //        the status will still be (modified)
+        //   reproduction: gitlet add hi
+        //                 gitlet commit foo
+        //                 echo "placeholder" >> foo (now modified)
+        //                 gitlet add hi (still unstaged modified)
         final Set<String> CM = this.blobs.keySet();
         final Set<String> RM = this.removed;
         final Set<String> AD = this.added.keySet();
@@ -308,11 +355,12 @@ public class Commit implements Serializable {
         SortedMap<String, Repository.UnstagedStatus> unstaged = new TreeMap<>();
         try {
             for (String file : FS) {
+                String tmpSha1;
                 Blob tmp;
-                if ((tmp = this.blobs.get(file)) != null) {
+                if ((tmpSha1 = this.blobs.get(file)) != null) {
                     // CM.contains(file)
                     Blob blob = new Blob(file);
-                    if (!blob.equals(tmp)) {
+                    if (!tmpSha1.equals(blob.getSha1())) {
                         unstaged.put(file, Repository.UnstagedStatus.MODIFIED);
                     }
                 } else if ((tmp = this.added.get(file)) != null) {
@@ -329,7 +377,7 @@ public class Commit implements Serializable {
                     unstaged.put(file, Repository.UnstagedStatus.NEW);
                 }
             }
-            for (String fileInStage: all) {
+            for (String fileInStage : all) {
                 // This is where > O(N) can occur
                 if (!FS.contains(fileInStage)) {
                     unstaged.put(fileInStage, Repository.UnstagedStatus.DELETED);
@@ -343,6 +391,7 @@ public class Commit implements Serializable {
 
     /**
      * Same logic as above, but return true once found
+     * TODO: Improve algorithm
      */
     public final boolean hasUnstaged(Collection<String> filesInWorkSpace) {
         final Set<String> CM = this.blobs.keySet();
@@ -355,11 +404,12 @@ public class Commit implements Serializable {
         all.removeAll(RM);
         try {
             for (String file : FS) {
+                String tmpSha1;
                 Blob tmp;
-                if ((tmp = this.blobs.get(file)) != null) {
+                if ((tmpSha1 = this.blobs.get(file)) != null) {
                     // CM.contains(file)
                     Blob blob = new Blob(file);
-                    if (!blob.equals(tmp)) {
+                    if (!tmpSha1.equals(blob.getSha1())) {
                         return true;
                     }
                 } else if ((tmp = this.added.get(file)) != null) {
@@ -376,7 +426,7 @@ public class Commit implements Serializable {
                     return true;
                 }
             }
-            for (String fileInStage: all) {
+            for (String fileInStage : all) {
                 // This is where > O(N) can occur
                 if (!FS.contains(fileInStage)) {
                     return true;
@@ -388,7 +438,7 @@ public class Commit implements Serializable {
         return false;
     }
 
-    public final Blob getBlob(final String filename) {
+    public final String getBlobSha1(final String filename) {
         return this.blobs.get(filename);
     }
 
@@ -429,10 +479,13 @@ public class Commit implements Serializable {
         System.out.printf("%s\n", this.message);
     }
 
+    /**
+     * This is a method for testing
+     */
     public final void printBlobInfo() {
         System.out.println("Blobs: ");
-        for (Blob b : this.blobs.values()) {
-            System.out.println(b.getSha1());
+        for (String bSha1 : this.blobs.values()) {
+            System.out.println(bSha1);
         }
         System.out.println("Added: ");
         for (Blob b : this.added.values()) {
@@ -444,12 +497,16 @@ public class Commit implements Serializable {
         }
     }
 
+    /**
+     * Print the status of stage changes
+     * Runtime: Possibly >O(N)
+     */
     public final void printStageStatus() {
         System.out.println("=== Staged Files ===");
         List<String> addedList =
                 this.added.keySet().stream().sorted()
                         .collect(Collectors.toList());
-        for (String s: addedList) {
+        for (String s : addedList) {
             System.out.println(s);
         }
         System.out.println();
@@ -457,7 +514,7 @@ public class Commit implements Serializable {
         List<String> removedList =
                 this.removed.stream().sorted().
                         collect(Collectors.toList());
-        for (String s: removedList) {
+        for (String s : removedList) {
             System.out.println(s);
         }
         System.out.println();

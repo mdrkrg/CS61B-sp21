@@ -5,10 +5,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.Files;
 
-/** A data structure containing a file's version and information.
- *
+/**
+ * A data structure containing a file's version and information.
  */
-public class Blob implements Serializable {
+public class Blob implements GitletObject {
 
     /* The file describer of the blob */
     // TODO: Whether it is needed?
@@ -21,9 +21,10 @@ public class Blob implements Serializable {
     /* The content of the file */
     final private byte[] data;
 
-    /** Create a blob with given file name
+    /**
+     * Create a blob with given file name
      *
-     *  @param  filename - The file name of the file
+     * @param filename - The file name of the file
      */
     public Blob(String filename) throws GitletException, IOException {
         File f = new File(filename);
@@ -37,8 +38,11 @@ public class Blob implements Serializable {
         this.sha1 = Utils.sha1(Utils.serialize(Files.size(f.toPath())), this.data);
     }
 
-    /** Check whether two blobs are equal
-     *  @param other - The blob to compare
+    /**
+     * Check whether two blobs are equal
+     * Runtime: O(1)
+     *
+     * @param other - The blob to compare
      */
     public boolean equals(Blob other) {
         if (other == null) {

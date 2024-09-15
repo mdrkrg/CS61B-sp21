@@ -2,49 +2,46 @@ package gitlet;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.util.*;
 
 import static gitlet.Utils.*;
 
-// TODO: any imports you need here
-
-/** Represents a gitlet repository.
+/**
+ * Represents a gitlet repository.
  *  TODO: It's a good idea to give a description here of what else this Class
  *  does at a high level.
  *
- *  @author TODO
+ * @author Crvena
  */
 public class Repository {
     /**
-     * TODO: add instance variables here.
-     *
-     * List all instance variables of the Repository class here with a useful
-     * comment above them describing what that variable represents and how that
-     * variable is used. We've provided two examples for you.
+     * The current working directory.
      */
-
-    /** The current working directory. */
     public static final File CWD = new File(System.getProperty("user.dir"));
-    /** The .gitlet directory. */
-    public static final File GITLET_DIR          = join(CWD, ".gitlet");
+    /**
+     * The .gitlet directory.
+     */
+    public static final File GITLET_DIR = join(CWD, ".gitlet");
     // public static final File BRANCHES_DIR      = join(GITLET_DIR, "branches");
-    public static final File STAGE_FILE          = join(GITLET_DIR, "stage");
-    public static final File LOGS_DIR            = join(GITLET_DIR, "logs");
-    public static final File LOGS_HEAD_FILE      = join(GITLET_DIR, "logs", "HEAD");
-    public static final File LOGS_REFS_DIR       = join(GITLET_DIR, "logs", "refs");
+    public static final File STAGE_FILE = join(GITLET_DIR, "stage");
+    public static final File LOGS_DIR = join(GITLET_DIR, "logs");
+    public static final File LOGS_HEAD_FILE = join(GITLET_DIR, "logs", "HEAD");
+    public static final File LOGS_REFS_DIR = join(GITLET_DIR, "logs", "refs");
     public static final File LOGS_REFS_HEADS_DIR = join(GITLET_DIR, "logs", "refs", "heads");
-    public static final File ROOT_HEAD_FILE      = join(GITLET_DIR, "HEAD");
-    public static final File OBJECTS_DIR         = join(GITLET_DIR, "objects");
-    public static final File REFS_DIR            = join(GITLET_DIR, "refs");
-    public static final File REFS_HEADS_DIR      = join(GITLET_DIR, "refs", "heads");
+    public static final File ROOT_HEAD_FILE = join(GITLET_DIR, "HEAD");
+    public static final File OBJECTS_DIR = join(GITLET_DIR, "objects");
+    public static final File REFS_DIR = join(GITLET_DIR, "refs");
+    public static final File REFS_HEADS_DIR = join(GITLET_DIR, "refs", "heads");
 
     public static final String DEFAULT_BRANCH = "master";
 
     /* TODO: fill in the rest of this class. */
 
-    /** Init the gitlet Repository
-     *  Assume that the repository has not yet been inited.
+    /**
+     * Init the gitlet Repository
+     * Assume that the repository has not yet been inited.
      */
     static void init() {
         Commit initCommit;
@@ -58,35 +55,36 @@ public class Repository {
         }
     }
 
-    /** Add a file to stage.
+    /**
+     * Add a file to stage.
+     * <p>
+     * There're five cases in total that can occur:
+     * 1. File not changed : filename equals, sha1 equals
+     * 2. File changed     : filename equals, sha1 unequals
+     * 3. File renamed     : filename unequals, sha1 equals (how?) (two ops)
+     * - If you use an iterator to iterate through all entries in
+     * the blobs and check if sha1 equals, that will be O(n) time
+     * - Git uses two lists: One deleted, one Added, how to implement?
+     * 4. File is new      : filename doesn't exist
+     * 5. File deleted     : filename exists, !file.exists()
+     * 6. File changed and renamed??? -> separate to two
+     * <p>
+     * // WARN: If switch a branch with staged changes,
+     * the target branch may contain same file as the staged
      *
-     *    There're five cases in total that can occur:
-     *    1. File not changed : filename equals, sha1 equals
-     *    2. File changed     : filename equals, sha1 unequals
-     *    3. File renamed     : filename unequals, sha1 equals (how?) (two ops)
-     *      - If you use an iterator to iterate through all entries in
-     *        the blobs and check if sha1 equals, that will be O(n) time
-     *      - Git uses two lists: One deleted, one Added, how to implement?
-     *    4. File is new      : filename doesn't exist
-     *    5. File deleted     : filename exists, !file.exists()
-     *    6. File changed and renamed??? -> separate to two
-     *
-     *    // WARN: If switch a branch with staged changes,
-     *             the target branch may contain same file as the staged
-     *
-     *  @param filename file to be staged.
+     * @param filename file to be staged.
      */
     static void add(final String filename) {
         Commit staged = getStagedCommit();
         try {
             Blob blob = new Blob(filename);
-            Boolean addSuccessful = staged.addToStage(blob);
+            boolean addSuccessful = staged.addToStage(blob);
             if (addSuccessful) {
                 writeStageFile(staged);
             }
         } catch (GitletException e) {
             // File not exist in workspace, Case 5 or error
-            boolean removeSuccessful = staged.remove(filename);
+            boolean removeSuccessful = staged.removeFromAll(filename);
             if (!removeSuccessful) {
                 // WARN: This is unsure whether to implement this behaviour
                 //       Need to refer to spec if failed.
@@ -98,15 +96,26 @@ public class Repository {
         }
     }
 
-    /** Remove a file from staged
-     *  If the file is exisiting in workspace, rm it
+    /**
+     * Remove a file from staged
+     * If the file is exisiting in workspace, rm it
+     * Three case:
+     * 1. File is in ADDED (staged)
+     * 2. File is in BLOBS (committed)
+     * <p>
+     * Operations:
+     * 1. Remove the file from ADDED
+     * 2. Add the file to REMOVED, delete the file
      *
-     *  @param filename file to remove from stage
+     * @param filename - file to remove from stage
      */
     static void remove(final String filename) {
         Commit staged = getStagedCommit();
         boolean stageRemoveSuccess = staged.removeFromStage(filename);
-        boolean blobsRemoveSuccess = staged.removeFromBlobs(filename);
+        boolean blobsRemoveSuccess = false;
+        if (!stageRemoveSuccess) {
+            blobsRemoveSuccess = staged.removeFromCommit(filename);
+        }
 
         // Hashmap constant time
         if (blobsRemoveSuccess) {
@@ -122,6 +131,15 @@ public class Repository {
         }
     }
 
+    /**
+     * Commit a new snapshot from staged changes
+     * <p>
+     * Runtime: >O(N) (hasStagedChanges())
+     *
+     * @param message - User inputted commit message
+     * @return The committed commit object (not used)
+     * @throws GitletException - When no staged changes or no message
+     */
     static Commit commit(final String message) throws GitletException {
         Commit staged = getStagedCommit();
         final String branch = getCurrentBranch();
@@ -131,10 +149,18 @@ public class Repository {
         if (message.isBlank()) {
             throw new GitletException("Please enter a commit message.");
         }
-        Commit newCommit = Commit.finishCommit(staged, branch, message, new Date());
-        writeCommitFiles(newCommit);
-        clearStageFile();
-        return newCommit;
+        try {
+            Commit newCommit = Commit.finishCommit(staged, branch, message, new Date());
+            for (Blob b : staged.getAddedBlobs()) {
+                writeBlobObject(b);
+            }
+            writeCommitFiles(newCommit);
+            clearStageFile();
+            return newCommit;
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+            throw new AssertionError("not reached");
+        }
     }
 
     static void log() {
@@ -174,20 +200,17 @@ public class Repository {
 
         if (hasUnstagedChanges()) {
             throw new GitletException(
-                "There is an untracked file in the way; delete it, or add and commit it first."
+                    "There is an untracked file in the way; delete it, or add and commit it first."
             );
         }
         try {
-            // TODO: Update filesystem
+            Commit branchHead = getHeadCommit(name);
+            restoreToCommit(branchHead);
             updateRootHead(name);
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         }
     }
-
-
-
-
 
 
     static void printStatus() {
@@ -202,7 +225,7 @@ public class Repository {
         List<String> newFiles = new ArrayList<>();
 
         System.out.println("=== Modifications Not Staged For Commit ===");
-        for (Map.Entry<String, UnstagedStatus> entry: unstaged.entrySet()) {
+        for (Map.Entry<String, UnstagedStatus> entry : unstaged.entrySet()) {
             String filename = entry.getKey();
             switch (entry.getValue()) {
                 case NEW:
@@ -218,7 +241,7 @@ public class Repository {
         }
         System.out.println();
         System.out.println("=== Untracked Files ===");
-        for (String filename: newFiles) {
+        for (String filename : newFiles) {
             System.out.println(filename);
         }
         System.out.println();
@@ -229,7 +252,7 @@ public class Repository {
         String currentBranch = getCurrentBranch();
         System.out.printf("*%s\n", currentBranch);
         List<String> branches = getBranches();
-        for (String branch: branches) {
+        for (String branch : branches) {
             if (!branch.equals(currentBranch)) {
                 System.out.println(branch);
             }
@@ -237,13 +260,32 @@ public class Repository {
         System.out.println();
     }
 
-    private static List<String> getBranches() {
+    /**
+     * Get a list of all branches in the current gitlet directory
+     * The branches are the filenames in the directory: refs/heads/*
+     * <p>
+     * Runtime: O(N) with N branches (N files in directory)
+     *
+     * @return A list of all branches
+     * @throws GitletException - When the refs/heads/ doesn't exist
+     */
+    private static List<String> getBranches() throws GitletException {
         if (!REFS_HEADS_DIR.exists()) {
             throw new GitletException("Broken Gitlet Repository!");
         }
         return Utils.plainFilenamesIn(REFS_HEADS_DIR);
     }
 
+    /**
+     * Get the current branch of the gitlet repository
+     * Current branch is in the HEAD plain text file,
+     * in the format of "refs/heads/[BRANCH]"
+     * <p>
+     * Runtime: O(1)
+     *
+     * @return The current branch of the gitlet working directory
+     * @throws GitletException - When head file doesn't exist
+     */
     public static String getCurrentBranch() throws GitletException {
         if (!ROOT_HEAD_FILE.exists()) {
             throw new GitletException("Broken gitlet repository: .gitlet/HEAD not found!");
@@ -251,10 +293,16 @@ public class Repository {
         final String rootContent = Utils.readContentsAsString(ROOT_HEAD_FILE);
         // final String[] tokens = rootContent.split("/");
         // assert tokens.length == 3;
-        String branch = rootContent.substring(rootContent.lastIndexOf("/") + 1);
-        return branch;
+        return rootContent.substring(rootContent.lastIndexOf("/") + 1);
     }
 
+    /**
+     * Get the Commit OBJECT of the latest commit of <b>current branch</b>
+     * <p>
+     * Runtime: O(?)
+     *
+     * @return The commit object described above
+     */
     public static Commit getHeadCommit() {
         // FIXME: This calling chain seems redundent.
         File commitRefFile = readRootHead();
@@ -262,10 +310,18 @@ public class Repository {
         return readCommitObject(commitObjectFile);
     }
 
-    /** Get the staged commit from stage file.
+    public static Commit getHeadCommit(String branch) {
+        File commitRefFile = Utils.join(REFS_HEADS_DIR, branch);
+        File commitObjectFile = readCommitRef(commitRefFile);
+        return readCommitObject(commitObjectFile);
+    }
+
+    /**
+     * Get the staged commit from stage file.
+     * <p>
+     * Runtime: O(N) with stage file of size N
      *
-     *  Runtime: O(N) with stage file of size N
-     *  @return The staged commit
+     * @return The staged commit
      */
     public static Commit getStagedCommit() {
         Commit staged;
@@ -278,6 +334,21 @@ public class Repository {
         return staged;
     }
 
+    /**
+     * Create all directories for gitlet workspace
+     * Called on init
+     * <p>
+     * Directories:
+     * .gitlet
+     * ├── logs
+     * │   └ refs
+     * │     └ heads
+     * │── objects
+     * └── refs
+     * └ heads
+     *
+     * @throws IOException - When IO system fails
+     */
     private static void makeEssentialDir() throws IOException {
         GITLET_DIR.mkdir();
         LOGS_DIR.mkdir();
@@ -288,11 +359,27 @@ public class Repository {
         REFS_HEADS_DIR.mkdir();
     }
 
+    /**
+     * Create files on init
+     * <p>
+     * Files:
+     * .gitlet
+     * ├── HEAD
+     * └── logs
+     * └ HEAD
+     *
+     * @throws IOException - When IO system fails
+     */
     private static void createInitFile() throws IOException {
         LOGS_HEAD_FILE.createNewFile();
         ROOT_HEAD_FILE.createNewFile();
     }
 
+    /**
+     * Write a commit object to gitlet directory
+     *
+     * @param commit - The commit to be witten
+     */
     private static void writeCommitFiles(Commit commit) {
         try {
             writeCommitLog(commit);
@@ -305,6 +392,12 @@ public class Repository {
         }
     }
 
+    /**
+     * Create the initial commit and write to gitlet workspace
+     * Init commit do not contain any blobs.
+     *
+     * @return The init commit object (No longer needed)
+     */
     private static Commit makeInitCommit() {
         Commit initCommit = Commit.createInitCommit();
         writeCommitFiles(initCommit);
@@ -328,18 +421,19 @@ public class Repository {
         STAGE_FILE.delete();
     }
 
-    /** Write to .gitlet/HEAD
-     *  The content will be refs/heads/BRANCH
+    /**
+     * Write to .gitlet/HEAD
+     * The content will be refs/heads/BRANCH
+     * <p>
+     * Called when:
+     * 1. git commit
+     * 2. git checkout BRANCH
+     * <p>
+     * NOTE: Currently it's hard coded to write refs/heads/BRANCH.
+     * If we want to support detach or remotes, we should improve this.
      *
-     *  Called when:
-     *    1. git commit
-     *    2. git checkout BRANCH
-     *
-     *  NOTE: Currently it's hard coded to write refs/heads/BRANCH.
-     *        If we want to support detach or remotes, we should improve this.
-     *
-     *  @param  branch - the branch to write in
-     *  @throws IOException - When IO fails
+     * @param branch - the branch to write in
+     * @throws IOException - When IO system fails
      */
     private static void updateRootHead(String branch) throws IOException {
         final String REFS_HEADS_PATH_STRING = "refs/heads/";
@@ -348,8 +442,10 @@ public class Repository {
         writeContents(ROOT_HEAD_FILE, REFS_HEADS_PATH_STRING + branch);
     }
 
-    /** Read the root HEAD
-     *  @return the ref file pointed by the HEAD's content
+    /**
+     * Read the root HEAD
+     *
+     * @return the ref file pointed by the HEAD's content
      */
     private static File readRootHead() throws GitletException { // throws IOException {
         if (!ROOT_HEAD_FILE.exists()) {
@@ -360,13 +456,14 @@ public class Repository {
         return refFile;
     }
 
-    /** Write to .gitlet/refs/heads/COMMIT.BRANCH
+    /**
+     * Write to .gitlet/refs/heads/COMMIT.BRANCH
+     * <p>
+     * Creates a new file whenever it is invoked.
+     * Contians sha1 of the commit.
      *
-     *  Creates a new file whenever it is invoked.
-     *  Contians sha1 of the commit.
-     *
-     *  @param  commit the commit to write in
-     *  @throws IOException
+     * @param commit the commit to write in
+     * @throws IOException - When IO system fails
      */
     private static void writeCommitRef(Commit commit) throws IOException {
         File refFile = Utils.join(REFS_HEADS_DIR, commit.getBranch());
@@ -375,10 +472,11 @@ public class Repository {
         Utils.writeContents(refFile, commit.getSha1());
     }
 
-    /** Read the commit ref
+    /**
+     * Read the commit ref
      *
-     *  @param  commitRefFile - the File returned by readRootHead(), assume exists
-     *  @return Object file of the commit.
+     * @param commitRefFile - the File returned by readRootHead(), assume exists
+     * @return Object file of the commit.
      *  TODO: Better name?
      *  NOTE: Whether return is valid should be checked by the caller.
      */
@@ -391,20 +489,139 @@ public class Repository {
         return commitObjectFile;
     }
 
+    private static Commit readCommitObject(String commitSha1) throws GitletException {
+        final String errorMsg = "Object file refered by commit ref doesn't exist!";
+        File commitObjectFile = Utils.join(
+                OBJECTS_DIR,
+                commitSha1.substring(0, 2),
+                commitSha1.substring(2)
+        );
+        return readGitletObject(commitObjectFile, Commit.class, errorMsg);
+    }
+
     // WARN: The map is not necessarily right, considering it stores addresses.
     private static Commit readCommitObject(File commitObjectFile) throws GitletException {
-        if (!commitObjectFile.exists()) {
-            throw new GitletException("Object file refered by commit ref doesn't exist!");
+        final String errorMsg = "Object file refered by commit ref doesn't exist!";
+        return readGitletObject(commitObjectFile, Commit.class, errorMsg);
+    }
+
+    private static Blob readBlobObject(String blobSha1) throws GitletException {
+        final String errorMsg = "Object file refered by blob ref doesn't exist!";
+        File blobObjectFile = Utils.join(
+                OBJECTS_DIR,
+                blobSha1.substring(0, 2),
+                blobSha1.substring(2)
+        );
+        return readGitletObject(blobObjectFile, Blob.class, errorMsg);
+    }
+
+    private static Blob readBlobObject(File blobObjectFile) throws GitletException {
+        final String errorMsg = "Object file refered by blob ref doesn't exist!";
+        return readGitletObject(blobObjectFile, Blob.class, errorMsg);
+    }
+
+    /**
+     * Read a Serializable GitletObject from file
+     * @param objectFile - The file to read from
+     * @param type - The type of GitletObject (Commit or Blob)
+     * @param errorMsg - The error message to display on not found
+     * @return The Gitlet Object according to Type T
+     * @param <T> The type of GitletObject (Commit or Blob)
+     * @throws GitletException - When object file doesn't exists
+     */
+    private static <T extends Serializable> T readGitletObject(
+            File objectFile, Class<T> type, String errorMsg
+    ) throws GitletException {
+        if (!objectFile.exists()) {
+            throw new GitletException(errorMsg);
         }
         try {
-            Commit commit = Utils.readObject(commitObjectFile, Commit.class);
-            return commit;
+            T object = Utils.readObject(objectFile, type);
+            return object;
         } catch (IllegalArgumentException e) {
             ErrorHandler.handleJavaException(e);
             throw new AssertionError("not reached");
         }
     }
 
+    /**
+     * Restore a file to the content of a blob,
+     * creates a new file if non-existent
+     * @param blobSha1 - The sha1 of the blob to restore to
+     * @throws GitletException - When there is no blob of that sha1
+     */
+    private static void restoreBlobContent(String blobSha1) throws GitletException {
+        Blob blob = readBlobObject(blobSha1);
+        restoreBlobContent(blob);
+    }
+
+    /**
+     * Restore a file to the content of a blob,
+     * @param blob - The blob to restore to
+     */
+    private static void restoreBlobContent(Blob blob) {
+        File blobFile = blob.getFile();
+        byte[] data = blob.getData();
+        try{
+            if (!blobFile.exists()) {
+                blobFile.createNewFile();
+            }
+            // Overwriting
+            Utils.writeContents(blobFile, (Object) data);
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    /**
+     * Restore all files to the according blobs
+     * TODO: Conditionally restore file if no difference,
+     *       may drop performance.
+     * Runtime: O(N) with N files in CWD, require O(1) HashMap
+     * @param blobs - The Map of filename-blob to restore to
+     */
+    private static void restoreAllFiles(Map<String, String> blobs) {
+        List<String> files = Utils.plainFilenamesIn(CWD);
+        try {
+            // Filter the FS and replace changed files with the ones in blobs
+            for (String filename : files) {
+                Blob currentBlob = new Blob(filename);
+                String otherSha1 = blobs.get(filename);
+                if (otherSha1 == null) {
+                    File currentFile = new File(filename);
+                    // TODO: Do not delete staged files (extra)
+                    currentFile.delete();
+                } else if (!otherSha1.equals(currentBlob.getSha1())) {
+                    restoreBlobContent(otherSha1);
+                }
+            }
+            // For the rest of blobs, they are new files
+            for (Map.Entry<String, String> blobEntry: blobs.entrySet()) {
+                File currentFile = new File(blobEntry.getKey());
+                if (!currentFile.exists()) {
+                    currentFile.createNewFile();
+                    String blobSha1 = blobEntry.getValue();
+                    restoreBlobContent(blobSha1);
+                }
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        } catch (GitletException e) {
+            ErrorHandler.handleGitletException(e);
+        }
+    }
+
+    /**
+     * Copy a branch's log to log's HEAD file
+     * Same as:
+     * <pre><code lang="shell">
+     *     cp logs/refs/heads/[branch] logs/head
+     * </code></pre>
+     * Runtime: O(N) with N commits in a branch
+     *
+     * @param branch - The branch to update the log HEAD to
+     * @throws IOException - When IO system fails
+     */
     private static void updateLogsHead(String branch) throws IOException {
         final File BRANCH_LOG_FILE = Utils.join(LOGS_REFS_HEADS_DIR, branch);
         // NOTE: If assert happens it's either a bug or a programmer failure
@@ -414,7 +631,15 @@ public class Repository {
 
     // private static File readLogsHead
 
-    private static void writeCommitLog(Commit commit) throws IOException {
+    /**
+     * Write a commit's log to gitlet workspace
+     * File: logs/refs/[branch]
+     * Runtime: O(1)
+     *
+     * @param commit The commit to be written
+     * @throws IOException - When IO system fails
+     */
+    private static void writeCommitLog(final Commit commit) throws IOException {
         assert !commit.isStaged();
         String branch = commit.getBranch();
         final File COMMIT_LOG_FILE = Utils.join(LOGS_REFS_HEADS_DIR, branch);
@@ -423,47 +648,85 @@ public class Repository {
         if (!COMMIT_LOG_FILE.exists()) {
             COMMIT_LOG_FILE.createNewFile();
         }
+        String previousContent = Utils.readContentsAsString(COMMIT_LOG_FILE);
         Utils.writeContents(
-            COMMIT_LOG_FILE,
-            commit.getParent() != null ? commit.getParent().getSha1() : "0000000000000000000000000000000000000000",
-            " ",
-            commit.getSha1(),
-            " ",
-            Long.toString(commit.getTimestamp().getTime()),
-            " ",
-            commit.getMessage(), // In git, there'll be an indicator
-                                 // whether it's a branch or commit
-            "\n"
+                COMMIT_LOG_FILE,
+                previousContent,
+                commit.getParent() != null
+                        ? commit.getParent().getSha1()
+                        : "0000000000000000000000000000000000000000",
+                " ",
+                commit.getSha1(),
+                " ",
+                Long.toString(commit.getTimestamp().getTime()),
+                " ",
+                commit.getMessage(), // In git, there'll be an indicator
+                // whether it's a branch or commit
+                "\n"
         );
         updateLogsHead(branch);
     }
 
-    private static void writeCommitObject(Commit commit) throws IOException, GitletException {
-        final File OBJECT_DIR = Utils.join(OBJECTS_DIR, commit.getSha1().substring(0, 2));
+    /**
+     * Serialize a GitletObject instance to an object file,
+     * placed in the directory objects/
+     * Runtime: O(N) with object of size of N
+     *
+     * @param object - The serializable gitlet object
+     * @throws IOException     - When IO System fails
+     * @throws GitletException - When a hash collision occurred, should never happen
+     */
+    private static void writeGitletObject(GitletObject object) throws IOException, GitletException {
+        final File OBJECT_DIR = Utils.join(OBJECTS_DIR, object.getSha1().substring(0, 2));
         if (!OBJECT_DIR.exists()) {
             OBJECT_DIR.mkdir();
         }
-        final File OBJECT_FILE = Utils.join(OBJECT_DIR, commit.getSha1().substring(2));
+        final File OBJECT_FILE = Utils.join(OBJECT_DIR, object.getSha1().substring(2));
         if (OBJECT_FILE.exists()) {
             throw new GitletException("Object exists!");
         }
         OBJECT_FILE.createNewFile();
-        Utils.writeObject(OBJECT_FILE, commit);
+        Utils.writeObject(OBJECT_FILE, object);
     }
 
-    /** Update the working directory with the blobs in the COMMIT
+    /**
+     * Serialize a commit to an object file
+     * Runtime: O(N) with commit of N staged files
      *
-     *  @param commit the commit to restore to
+     * @param commit - The commit object to write to file
+     * @throws IOException     - When IO System fails
+     * @throws GitletException - When a hash collision occurred, should never happen
+     */
+    private static void writeCommitObject(Commit commit) throws IOException, GitletException {
+        writeGitletObject(commit);
+    }
+
+    /**
+     * Serialize a blob to an object file
+     *
+     * @param blob - The blob to be written to file
+     * @throws IOException     - When IO System fails
+     * @throws GitletException - When a hash collision occurred, should never happen
+     */
+    private static void writeBlobObject(Blob blob) throws IOException, GitletException {
+        writeGitletObject(blob);
+    }
+
+    /**
+     * Update the working directory with the blobs in the COMMIT
+     *
+     * @param commit the commit to restore to
      */
     private static void restoreToCommit(Commit commit) {
-        List<String> filenames = Utils.plainFilenamesIn(CWD);
-        for (String filename: filenames) {
-            File f = new File(filename);
-            // TODO:
-        }
+        restoreAllFiles(commit.getAllBlobs());
     }
 
-    enum UnstagedStatus { DELETED, MODIFIED, NEW }
+    enum UnstagedStatus {DELETED, MODIFIED, NEW}
+
+    /**
+     * Get all unstaged files in the CWD
+     * @return - A SortedMap of filename-status pair
+     */
     public static SortedMap<String, UnstagedStatus> getUnstagedFiles() {
         Commit staged = getStagedCommit();
         List<String> files = plainFilenamesIn(CWD);
@@ -487,6 +750,10 @@ public class Repository {
         return unstaged;
     }
 
+    /**
+     * Check whether the CWD has unstaged changes
+     * @return true on has, false otherwise
+     */
     public static boolean hasUnstagedChanges() {
         Commit staged = getStagedCommit();
         List<String> files = plainFilenamesIn(CWD);
