@@ -178,6 +178,9 @@ public class Commit implements GitletObject {
         Blob existing = existingSha1 != null
                 ? Repository.readBlobObject(existingSha1) : null;
 
+        if (this.removed.remove(filename)) {
+
+        }
         if (stagedBlob == null || !blob.equals(stagedBlob)) {
             // Add only when
             // 1. file not found in stage
@@ -195,6 +198,7 @@ public class Commit implements GitletObject {
 
     /**
      * Readd a file from REMOVED
+     *
      * @param filename - The file to be readded
      * @return true on success, false on not found in REMOVED
      */
@@ -352,13 +356,13 @@ public class Commit implements GitletObject {
         final Set<String> R = this.removed;
         final Set<String> A = this.added.keySet();
         // O(1)
-        final Set<String> FS = new HashSet<>(filesInWorkSpace);
+        final Set<String> F = new HashSet<>(filesInWorkSpace);
         Set<String> all = new HashSet<>(C);
         all.addAll(A);
         all.removeAll(R);
         SortedMap<String, Repository.UnstagedStatus> unstaged = new TreeMap<>();
         try {
-            for (String file : FS) {
+            for (String file : F) {
                 String tmpSha1;
                 Blob tmp;
                 if ((tmp = this.added.get(file)) != null) {
@@ -383,7 +387,7 @@ public class Commit implements GitletObject {
             }
             for (String fileInStage : all) {
                 // This is where > O(N) can occur
-                if (!FS.contains(fileInStage)) {
+                if (!F.contains(fileInStage)) {
                     unstaged.put(fileInStage, Repository.UnstagedStatus.DELETED);
                 }
             }
@@ -402,12 +406,12 @@ public class Commit implements GitletObject {
         final Set<String> R = this.removed;
         final Set<String> A = this.added.keySet();
         // O(1)
-        final Set<String> FS = new HashSet<>(filesInWorkSpace);
+        final Set<String> F = new HashSet<>(filesInWorkSpace);
         Set<String> all = new HashSet<>(C);
         all.addAll(A);
         all.removeAll(R);
         try {
-            for (String file : FS) {
+            for (String file : F) {
                 String tmpSha1;
                 Blob tmp;
                 if ((tmpSha1 = this.blobs.get(file)) != null) {
@@ -432,7 +436,7 @@ public class Commit implements GitletObject {
             }
             for (String fileInStage : all) {
                 // This is where > O(N) can occur
-                if (!FS.contains(fileInStage)) {
+                if (!F.contains(fileInStage)) {
                     return true;
                 }
             }

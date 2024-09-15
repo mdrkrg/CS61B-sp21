@@ -78,7 +78,13 @@ public class Repository {
     static void add(final String filename) {
         // FIXME: When file change back, it's still in stage
         Commit staged = getStagedCommit();
-        try {
+        if (staged.readdFromRemoved(filename)) {
+            // File already in REMOVED
+            // Should restore the file (required)
+            String removedSha1 = staged.getBlobSha1(filename);
+            restoreBlobContent(removedSha1);
+            writeStageFile(staged);
+        } else try {
             Blob blob = new Blob(filename);
             boolean addSuccessful = staged.addToStage(blob);
             if (addSuccessful) {
@@ -86,19 +92,12 @@ public class Repository {
             }
         } catch (GitletException e) {
             // File not exist in workspace
-            if (staged.readdFromRemoved(filename)) {
-                // Already in REMOVED
-                // Should restore the file
-                String removedSha1 = staged.getBlobSha1(filename);
-                restoreBlobContent(removedSha1);
-            } else {
-                // Case 5 or error
-                boolean removeSuccessful = staged.removeFromAll(filename);
-                if (!removeSuccessful) {
-                    // WARN: This is unsure whether to implement this behaviour
-                    //       Need to refer to spec if failed.
-                    throw new GitletException("File does not exist.");
-                }
+            // Case 5 or error
+            boolean removeSuccessful = staged.removeFromAll(filename);
+            if (!removeSuccessful) {
+                // WARN: This is unsure whether to implement this behaviour
+                //       Need to refer to spec if failed.
+                throw new GitletException("File does not exist.");
             }
             writeStageFile(staged);
         } catch (IOException e) {
@@ -526,11 +525,12 @@ public class Repository {
 
     /**
      * Read a Serializable GitletObject from file
+     *
      * @param objectFile - The file to read from
-     * @param type - The type of GitletObject (Commit or Blob)
-     * @param errorMsg - The error message to display on not found
+     * @param type       - The type of GitletObject (Commit or Blob)
+     * @param errorMsg   - The error message to display on not found
+     * @param <T>        The type of GitletObject (Commit or Blob)
      * @return The Gitlet Object according to Type T
-     * @param <T> The type of GitletObject (Commit or Blob)
      * @throws GitletException - When object file doesn't exists
      */
     private static <T extends Serializable> T readGitletObject(
@@ -551,6 +551,7 @@ public class Repository {
     /**
      * Restore a file to the content of a blob,
      * creates a new file if non-existent
+     *
      * @param blobSha1 - The sha1 of the blob to restore to
      * @throws GitletException - When there is no blob of that sha1
      */
@@ -561,12 +562,13 @@ public class Repository {
 
     /**
      * Restore a file to the content of a blob,
+     *
      * @param blob - The blob to restore to
      */
     private static void restoreBlobContent(Blob blob) {
         File blobFile = blob.getFile();
         byte[] data = blob.getData();
-        try{
+        try {
             if (!blobFile.exists()) {
                 blobFile.createNewFile();
             }
@@ -582,6 +584,7 @@ public class Repository {
      * TODO: Conditionally restore file if no difference,
      *       may drop performance.
      * Runtime: O(N) with N files in CWD, require O(1) HashMap
+     *
      * @param blobs - The Map of filename-blob to restore to
      */
     private static void restoreAllFiles(Map<String, String> blobs) {
@@ -600,7 +603,7 @@ public class Repository {
                 }
             }
             // For the rest of blobs, they are new files
-            for (Map.Entry<String, String> blobEntry: blobs.entrySet()) {
+            for (Map.Entry<String, String> blobEntry : blobs.entrySet()) {
                 File currentFile = new File(blobEntry.getKey());
                 if (!currentFile.exists()) {
                     currentFile.createNewFile();
@@ -725,10 +728,9 @@ public class Repository {
         restoreAllFiles(commit.getAllBlobs());
     }
 
-    enum UnstagedStatus {DELETED, MODIFIED, NEW}
-
     /**
      * Get all unstaged files in the CWD
+     *
      * @return - A SortedMap of filename-status pair
      */
     public static SortedMap<String, UnstagedStatus> getUnstagedFiles() {
@@ -756,6 +758,7 @@ public class Repository {
 
     /**
      * Check whether the CWD has unstaged changes
+     *
      * @return true on has, false otherwise
      */
     public static boolean hasUnstagedChanges() {
@@ -763,4 +766,6 @@ public class Repository {
         List<String> files = plainFilenamesIn(CWD);
         return staged.hasUnstaged(files);
     }
+
+    enum UnstagedStatus {DELETED, MODIFIED, NEW}
 }
