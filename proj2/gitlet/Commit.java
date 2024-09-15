@@ -94,9 +94,10 @@ public class Commit implements GitletObject {
     /**
      * Create a new (finished) commit from a staged commit
      * Runtime: O(N) with N items in STAGED's blobs, added and removed
-     * @param staged - The staged file to construct the commit
-     * @param branch - The branch that the commit belong to
-     * @param message - The commit message of the commit
+     *
+     * @param staged    - The staged file to construct the commit
+     * @param branch    - The branch that the commit belong to
+     * @param message   - The commit message of the commit
      * @param timestamp - The timestamp of the commit
      */
     private Commit(Commit staged, String branch, String message, Date timestamp) {
@@ -105,7 +106,7 @@ public class Commit implements GitletObject {
             this.blobs.remove(name);
         }
 //        this.blobs.putAll(staged.added);
-        for (Map.Entry<String, Blob> entry: staged.added.entrySet()) {
+        for (Map.Entry<String, Blob> entry : staged.added.entrySet()) {
             this.blobs.put(entry.getKey(), entry.getValue().getSha1());
             // TODO: save blob object to file
         }
@@ -336,14 +337,6 @@ public class Commit implements GitletObject {
      * @return a set of unstaged files mapped to their reason
      */
     public final SortedMap<String, Repository.UnstagedStatus> getUnstaged(Collection<String> filesInWorkSpace) {
-        // FIXME: When a file is both staged and committed,
-        //        gitlet will first compare with that in the committed,
-        //        so even if I added the modification to commit,
-        //        the status will still be (modified)
-        //   reproduction: gitlet add hi
-        //                 gitlet commit foo
-        //                 echo "placeholder" >> foo (now modified)
-        //                 gitlet add hi (still unstaged modified)
         final Set<String> CM = this.blobs.keySet();
         final Set<String> RM = this.removed;
         final Set<String> AD = this.added.keySet();
@@ -357,16 +350,16 @@ public class Commit implements GitletObject {
             for (String file : FS) {
                 String tmpSha1;
                 Blob tmp;
-                if ((tmpSha1 = this.blobs.get(file)) != null) {
-                    // CM.contains(file)
-                    Blob blob = new Blob(file);
-                    if (!tmpSha1.equals(blob.getSha1())) {
-                        unstaged.put(file, Repository.UnstagedStatus.MODIFIED);
-                    }
-                } else if ((tmp = this.added.get(file)) != null) {
+                if ((tmp = this.added.get(file)) != null) {
                     // AD.contains(file)
                     Blob blob = new Blob(file);
                     if (!blob.equals(tmp)) {
+                        unstaged.put(file, Repository.UnstagedStatus.MODIFIED);
+                    }
+                } else if ((tmpSha1 = this.blobs.get(file)) != null) {
+                    // CM.contains(file)
+                    Blob blob = new Blob(file);
+                    if (!tmpSha1.equals(blob.getSha1())) {
                         unstaged.put(file, Repository.UnstagedStatus.MODIFIED);
                     }
                 } else if (this.removed.contains(file)) {
