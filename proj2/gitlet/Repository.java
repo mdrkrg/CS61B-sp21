@@ -75,6 +75,7 @@ public class Repository {
      * @param filename file to be staged.
      */
     static void add(final String filename) {
+        // FIXME: When file change back, it's still in stage
         Commit staged = getStagedCommit();
         try {
             Blob blob = new Blob(filename);
@@ -133,14 +134,16 @@ public class Repository {
 
     /**
      * Commit a new snapshot from staged changes
+     * 1. Save the blobs in the added
+     * 2. Save the commit object
+     * 3. Delete the stage file
      * <p>
      * Runtime: >O(N) (hasStagedChanges())
      *
      * @param message - User inputted commit message
-     * @return The committed commit object (not used)
      * @throws GitletException - When no staged changes or no message
      */
-    static Commit commit(final String message) throws GitletException {
+    static void commit(final String message) throws GitletException {
         Commit staged = getStagedCommit();
         final String branch = getCurrentBranch();
         if (!staged.hasStagedChanges()) {
@@ -156,10 +159,8 @@ public class Repository {
             }
             writeCommitFiles(newCommit);
             clearStageFile();
-            return newCommit;
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
-            throw new AssertionError("not reached");
         }
     }
 
@@ -228,15 +229,9 @@ public class Repository {
         for (Map.Entry<String, UnstagedStatus> entry : unstaged.entrySet()) {
             String filename = entry.getKey();
             switch (entry.getValue()) {
-                case NEW:
-                    newFiles.add(filename);
-                    break;
-                case MODIFIED:
-                    System.out.printf("%s (modified)\n", filename);
-                    break;
-                case DELETED:
-                    System.out.printf("%s (deleted)\n", filename);
-                    break;
+                case NEW -> newFiles.add(filename);
+                case MODIFIED -> System.out.printf("%s (modified)\n", filename);
+                case DELETED -> System.out.printf("%s (deleted)\n", filename);
             }
         }
         System.out.println();
@@ -505,7 +500,7 @@ public class Repository {
         return readGitletObject(commitObjectFile, Commit.class, errorMsg);
     }
 
-    private static Blob readBlobObject(String blobSha1) throws GitletException {
+    public static Blob readBlobObject(String blobSha1) throws GitletException {
         final String errorMsg = "Object file refered by blob ref doesn't exist!";
         File blobObjectFile = Utils.join(
                 OBJECTS_DIR,

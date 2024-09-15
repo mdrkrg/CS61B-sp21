@@ -105,13 +105,9 @@ public class Commit implements GitletObject {
         for (String name : staged.removed) {
             this.blobs.remove(name);
         }
-//        this.blobs.putAll(staged.added);
         for (Map.Entry<String, Blob> entry : staged.added.entrySet()) {
             this.blobs.put(entry.getKey(), entry.getValue().getSha1());
-            // TODO: save blob object to file
         }
-//        staged.added = null; // NO NEED
-//        staged.removed = null;
         this.parent = staged.parent;
         this.branch = branch;
         this.message = message;
@@ -180,7 +176,11 @@ public class Commit implements GitletObject {
             // Add only when
             // 1. file not found in stage
             // 2. file not equal staged
-            if (blob.equals(this.blobs.get(filename))) {
+            String existingSha1 = this.blobs.get(filename);
+            // TODO: Class structure weird
+            Blob existing = existingSha1 != null
+                    ? Repository.readBlobObject(existingSha1) : null;
+            if (blob.equals(existing)) {
                 // Remove from staged
                 this.added.remove(filename);
             } else {
@@ -276,10 +276,10 @@ public class Commit implements GitletObject {
             return !added.equals(blob);
         }
         // if not found, check the last commit
-        String commitedSha1 = this.blobs.get(filename);
-        if (commitedSha1 != null) {
+        String committedSha1 = this.blobs.get(filename);
+        if (committedSha1 != null) {
             // file in last commit
-            return !commitedSha1.equals(blob.getSha1());
+            return !committedSha1.equals(blob.getSha1());
         }
         return false;
     }
