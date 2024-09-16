@@ -1,5 +1,7 @@
 package gitlet;
 
+import org.hamcrest.internal.ArrayIterator;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
@@ -172,6 +174,10 @@ public class Repository {
         }
     }
 
+    /**
+     * Print the log of current branch
+     * Runtime: O(N) with N commits in current branch
+     */
     static void log() {
         Commit head = getHeadCommit();
         while (head != null) {
@@ -180,6 +186,47 @@ public class Repository {
             System.out.println();
             head = head.getParent();
         }
+    }
+
+    /**
+     * Print the global log of all commits, regardless of the order
+     * Runtime: O(N) with N total commits
+     */
+    static void globalLog() {
+        List<String> logs = Utils.plainFilenamesIn(LOGS_REFS_HEADS_DIR);
+        assert logs != null;
+        try {
+            for (String filename: logs) {
+                File logFile = Utils.join(LOGS_REFS_HEADS_DIR, filename);
+                String[] lines = Utils.readContentsAsString(logFile).split("\n");
+                for (int i = lines.length - 1; i >= 0; i--) {
+                    System.out.println("===");
+                    printLogText(lines[i]);
+                    System.out.println();
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    /**
+     * Print a log string given a log line of text with the following format:
+     * "[parent commit] [current commit] [timestamp] [commit message]"
+     *
+     * @param logFileLine - A line of text in the file logs/refs/heads/[branch]
+     */
+    private static void printLogText(String logFileLine) {
+        String[] tokens = logFileLine.split(" ", 4);
+        String commitSha1 = tokens[1];
+        Date timestamp = new Date(Long.parseLong(tokens[2]));
+        String commitMsg = tokens[3];
+        System.out.printf(
+                "commit %1$s\nDate: %2$ta %2$tb %2$td %2$tT %2$tY %2$tz\n%3$s\n",
+                commitSha1,
+                timestamp,
+                commitMsg
+        );
     }
 
     static void createNewBranch(String name) throws GitletException {

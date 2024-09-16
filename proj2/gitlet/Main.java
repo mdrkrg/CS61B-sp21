@@ -22,37 +22,21 @@ public class Main {
         selectInit(firstArg); // FIXME: This is not clean
         ErrorHandler.handleGitletNotExist();
         switch (firstArg) {
-            case "test":
+            case "test" -> {
                 Command.testHead();
                 Command.testStaged();
-                break;
-            case "add":
-                Command.add(args);
-                break;
-            case "rm":
-                Command.rm(args);
-                break;
-            case "commit":
-                Command.commit(args);
-                break;
-            case "log":
-                Command.log(args);
-                break;
-            case "branch":
-                Command.branch(args);
-                break;
-            case "checkout":
-                Command.checkout(args);
-                break;
-            case "switch":
-                Command.switchTo(args);
-                break;
-            case "status":
-                Command.status(args);
-                break;
+            }
+            case "add" -> Command.add(args);
+            case "rm" -> Command.rm(args);
+            case "commit" -> Command.commit(args);
+            case "log" -> Command.log(args);
+            case "branch" -> Command.branch(args);
+            case "checkout" -> Command.checkout(args);
+            case "switch" -> Command.switchTo(args);
+            case "status" -> Command.status(args);
+            case "global-log" -> Command.globalLog(args);
             // TODO: FILL THE REST IN
-            default:
-                ErrorHandler.handleCommandNotFound();
+            default -> ErrorHandler.handleCommandNotFound();
         }
     }
 

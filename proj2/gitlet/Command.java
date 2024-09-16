@@ -121,6 +121,11 @@ public class Command {
         Repository.printStatus();
     }
 
+    static void globalLog(String[] args) {
+        validateArgCount(args, 1);
+        Repository.globalLog();
+    }
+
 
     static void testHead() {
         System.out.println(Repository.getCurrentBranch());
