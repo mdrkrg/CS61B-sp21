@@ -31,7 +31,7 @@ public class Blob implements GitletObject {
         this.file = f;
         this.filename = filename;
         this.data = Files.readAllBytes(f.toPath());
-        this.sha1 = Utils.sha1(Utils.serialize(Files.size(f.toPath())), this.data);
+        this.sha1 = Utils.sha1(Utils.serialize(Files.size(f.toPath())), this.data, this.filename);
     }
 
     /**
