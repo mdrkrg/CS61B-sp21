@@ -62,6 +62,16 @@ public class Command {
         }
     }
 
+    static void rmBranch(String[] args) {
+        validateArgCount(args, 2);
+        String branch = args[1];
+        try {
+            Repository.removeBranch(branch);
+        } catch (GitletException e) {
+            ErrorHandler.handleGitletException(e);
+        }
+    }
+
     /**
      * Usage:
      * 1. gitlet checkout -- [file name]

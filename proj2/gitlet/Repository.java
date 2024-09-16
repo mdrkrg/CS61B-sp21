@@ -30,6 +30,7 @@ public class Repository {
     public static final File LOGS_HEAD_FILE = join(GITLET_DIR, "logs", "HEAD");
     public static final File LOGS_REFS_DIR = join(GITLET_DIR, "logs", "refs");
     public static final File LOGS_REFS_HEADS_DIR = join(GITLET_DIR, "logs", "refs", "heads");
+    public static final File REMOVED_LOG = Utils.join(GITLET_DIR, "logs", "refs", "removed");
     public static final File ROOT_HEAD_FILE = join(GITLET_DIR, "HEAD");
     public static final File OBJECTS_DIR = join(GITLET_DIR, "objects");
     public static final File REFS_DIR = join(GITLET_DIR, "refs");
@@ -201,6 +202,12 @@ public class Repository {
                     printLogLineInfo(lines[i]);
                 }
             }
+            if (REMOVED_LOG.exists()) {
+                String[] removedLines = Utils.readContentsAsString(REMOVED_LOG).split("\n");
+                for (int i = removedLines.length - 1; i >= 0; i--) {
+                    printLogLineInfo(removedLines[i]);
+                }
+            }
         } catch (IllegalArgumentException e) {
             ErrorHandler.handleJavaException(e);
         }
@@ -241,16 +248,12 @@ public class Repository {
         try {
             for (String filename: logs) {
                 File logFile = Utils.join(LOGS_REFS_HEADS_DIR, filename);
-                String[] lines = Utils.readContentsAsString(logFile).split("\n");
-                for (String line: lines) {
-                    String[] tokens = line.split(" ", 4);
-                    String commitID = tokens[1];
-                    String commitMsg = tokens[3];
-                    if (queryMsg.equals(commitMsg)) {
-                        System.out.println(commitID);
-                        found = true;
-                    }
-                }
+                // If findOneFile returns true, found will always come true
+                found = found || findOneFile(logFile, queryMsg);
+            }
+            if (REMOVED_LOG.exists()) {
+                // Find the removed log file;
+                found = found || findOneFile(REMOVED_LOG, queryMsg);
             }
         } catch (IllegalArgumentException e) {
             ErrorHandler.handleJavaException(e);
@@ -258,6 +261,21 @@ public class Repository {
         if (!found) {
             throw new GitletException("Found no commit with that message.");
         }
+    }
+
+    private static boolean findOneFile(File logFile, String queryMsg) {
+        boolean found = false;
+        String[] lines = Utils.readContentsAsString(logFile).split("\n");
+        for (String line: lines) {
+            String[] tokens = line.split(" ", 4);
+            String commitID = tokens[1];
+            String commitMsg = tokens[3];
+            if (queryMsg.equals(commitMsg)) {
+                System.out.println(commitID);
+                found = true;
+            }
+        }
+        return found;
     }
 
 
@@ -273,6 +291,30 @@ public class Repository {
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         }
+    }
+
+    static void removeBranch(String branch) throws GitletException {
+        final File BRANCH_FILE = Utils.join(REFS_HEADS_DIR, branch);
+        if (!BRANCH_FILE.exists()) {
+            throw new GitletException("A branch with that name does not exist.");
+        }
+        String current = getCurrentBranch();
+        if (branch.equals(current)) {
+            throw new GitletException("Cannot remove the current branch.");
+        }
+        final File BRANCH_LOG = Utils.join(LOGS_REFS_HEADS_DIR, branch);
+        try {
+            if (!REMOVED_LOG.exists()) {
+                REMOVED_LOG.createNewFile();
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+        String oldContent = Utils.readContentsAsString(REMOVED_LOG);
+        String appendContent = Utils.readContentsAsString(BRANCH_LOG);
+        Utils.writeContents(REMOVED_LOG, oldContent, appendContent);
+        BRANCH_FILE.deleteOnExit();
+        BRANCH_LOG.deleteOnExit();
     }
 
     static void switchToBranch(String name) throws GitletException {

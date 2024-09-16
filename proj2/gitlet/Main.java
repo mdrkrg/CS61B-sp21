@@ -36,6 +36,7 @@ public class Main {
             case "status"     -> Command.status(args);
             case "global-log" -> Command.globalLog(args);
             case "find"       -> Command.find(args);
+            case "rm-branch"  -> Command.rmBranch(args);
             // TODO: FILL THE REST IN
             default           -> ErrorHandler.handleCommandNotFound();
         }
