@@ -446,28 +446,49 @@ public class Commit implements GitletObject {
         return false;
     }
 
+    /**
+     * Get the sha1 of a blob
+     * Runtime: O(1) with N blobs in BLOBS
+     * @param filename - Filename of the blob
+     * @return Blob sha1 on success, null on failure
+     */
     public final String getBlobSha1(final String filename) {
         return this.blobs.get(filename);
     }
 
+    /**
+     * @return branch of this commit
+     */
     public final String getBranch() {
         return this.branch;
     }
 
+    /**
+     * @return parent of this commit
+     */
     public final Commit getParent() {
         return this.parent;
     }
 
+    /**
+     * @return message of this commit
+     */
     public final String getMessage() {
         assert !this.staged;
         return this.message;
     }
 
+    /**
+     * @return timestamp of this commit
+     */
     public final Date getTimestamp() {
         assert !this.staged;
         return this.timestamp;
     }
 
+    /**
+     * @return sha1 of this commit
+     */
     public final String getSha1() {
         return this.sha1;
     }

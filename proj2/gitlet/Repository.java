@@ -255,6 +255,7 @@ public class Repository {
         String currentBranch = getCurrentBranch();
         System.out.printf("*%s\n", currentBranch);
         List<String> branches = getBranches();
+        assert branches != null;
         for (String branch : branches) {
             if (!branch.equals(currentBranch)) {
                 System.out.println(branch);
@@ -283,7 +284,6 @@ public class Repository {
      * Get the current branch of the gitlet repository
      * Current branch is in the HEAD plain text file,
      * in the format of "refs/heads/[BRANCH]"
-     * <p>
      * Runtime: O(1)
      *
      * @return The current branch of the gitlet working directory
@@ -300,10 +300,47 @@ public class Repository {
     }
 
     /**
+     * Get a commit of the given commit ID (assume at least 5 char long)
+     * Runtime: ~O(1) with N total commits (hashset file structure)
+     * @param commitID - The sha1 identifier of a commit
+     * @return Commit object
+     * @throws GitletException - When commit of the given ID doesn't exist
+     */
+    public static Commit getCommit(final String commitID) throws GitletException {
+        final String ERROR_MSG = "No commit with that id exists.";
+        final String commitDirname = commitID.substring(0, 2);
+        String commitFilename = commitID.substring(2);
+        if (commitID.length() != 40) {
+            final File COMMIT_OBJECT_DIR = Utils.join(OBJECTS_DIR, commitID.substring(0, 2));
+            if (!COMMIT_OBJECT_DIR.exists()) {
+                throw new GitletException(ERROR_MSG);
+            }
+            List<String> files = Utils.plainFilenamesIn(COMMIT_OBJECT_DIR);
+            if (files == null) {
+                throw new GitletException(ERROR_MSG);
+            }
+            for (String filename: files) {
+                if (filename.contains(commitFilename)) {
+                    commitFilename = filename;
+                    break;
+                }
+                throw new GitletException(ERROR_MSG);
+            }
+        }
+        // File should exist now
+        final File commitObjectFile = Utils.join(OBJECTS_DIR, commitDirname, commitFilename);
+        try {
+            return readCommitObject(commitObjectFile);
+        } catch (GitletException e) {
+            // Object file has wrong type
+            throw new GitletException(ERROR_MSG);
+        }
+    }
+
+    /**
      * Get the Commit OBJECT of the latest commit of <b>current branch</b>
-     * <p>
-     * Runtime: O(?)
-     *
+     * Runtime: O(1) with N commits
+     *          O(N) with commit of size N
      * @return The commit object described above
      */
     public static Commit getHeadCommit() {
@@ -313,7 +350,18 @@ public class Repository {
         return readCommitObject(commitObjectFile);
     }
 
-    public static Commit getHeadCommit(String branch) {
+    /**
+     * Get the head commit of a given branch
+     * Runtime: O(1) with N branches
+     * @param branch - the name of the branch to get from
+     * @return The head commit of a branch
+     * @throws GitletException - When branch doesn't exist
+     */
+    public static Commit getHeadCommit(String branch) throws GitletException {
+        final File BRANCH_FILE = Utils.join(REFS_HEADS_DIR, branch);
+        if (!BRANCH_FILE.exists()) {
+            throw new GitletException("No such branch exists.");
+        }
         File commitRefFile = Utils.join(REFS_HEADS_DIR, branch);
         File commitObjectFile = readCommitRef(commitRefFile);
         return readCommitObject(commitObjectFile);
@@ -321,9 +369,7 @@ public class Repository {
 
     /**
      * Get the staged commit from stage file.
-     * <p>
      * Runtime: O(N) with stage file of size N
-     *
      * @return The staged commit
      */
     public static Commit getStagedCommit() {
@@ -504,12 +550,12 @@ public class Repository {
 
     // WARN: The map is not necessarily right, considering it stores addresses.
     private static Commit readCommitObject(File commitObjectFile) throws GitletException {
-        final String errorMsg = "Object file refered by commit ref doesn't exist!";
+        final String errorMsg = "Object file referred by commit ref doesn't exist!";
         return readGitletObject(commitObjectFile, Commit.class, errorMsg);
     }
 
     public static Blob readBlobObject(String blobSha1) throws GitletException {
-        final String errorMsg = "Object file refered by blob ref doesn't exist!";
+        final String errorMsg = "Object file referred by blob ref doesn't exist!";
         File blobObjectFile = Utils.join(
                 OBJECTS_DIR,
                 blobSha1.substring(0, 2),
@@ -525,7 +571,7 @@ public class Repository {
 
     /**
      * Read a Serializable GitletObject from file
-     *
+     * Runtime: O(1) with object of size N
      * @param objectFile - The file to read from
      * @param type       - The type of GitletObject (Commit or Blob)
      * @param errorMsg   - The error message to display on not found
@@ -545,13 +591,53 @@ public class Repository {
         } catch (IllegalArgumentException e) {
             ErrorHandler.handleJavaException(e);
             throw new AssertionError("not reached");
+        } catch (ClassCastException e) {
+            throw new GitletException(errorMsg);
         }
+    }
+
+    /**
+     * Restore a file given the filename to the blob in the head commit
+     * Runtime: O(1) with N files in the commit
+     *          O(N) with file of size N
+     * @param filename - filename of the file to be restored
+     */
+    public static void restoreFile(String filename) throws GitletException {
+        Commit head = getHeadCommit();
+        String blobSha1 = head.getBlobSha1(filename);
+        if (blobSha1 != null) {
+            // This one will throw its own GitletException, though
+            // May need to improve
+            restoreBlobContent(blobSha1);
+        } else {
+            throw new GitletException("File does not exist in that commit.");
+        }
+    }
+
+    /**
+     * Restore a file given the filename to the blob in the given commit
+     * Runtime: O(1) with N total commits
+     *          O(1) with N files in one commit
+     *          O(N) with file of size N
+     * @param commitID - The sha1 abbreviation of the commit (at least 5 char)
+     * @param filename - Filename of the file to be restored
+     * @throws GitletException - Filename doesn't exist in the given commit
+     *                           Or commit with the ID doesn't exist
+     */
+    public static void restoreFile(String commitID, String filename) throws GitletException {
+        Commit commit = getCommit(commitID);
+        String blobSha1 = commit.getBlobSha1(filename);
+        if (blobSha1 == null) {
+            throw new GitletException("File does not exist in that commit.");
+        }
+        restoreBlobContent(blobSha1);
     }
 
     /**
      * Restore a file to the content of a blob,
      * creates a new file if non-existent
-     *
+     * Runtime: O(N) with blob of size N
+     *          O(1) with other factors
      * @param blobSha1 - The sha1 of the blob to restore to
      * @throws GitletException - When there is no blob of that sha1
      */
@@ -562,7 +648,8 @@ public class Repository {
 
     /**
      * Restore a file to the content of a blob,
-     *
+     * Runtime: O(N) with blob of size N
+     *          O(1) with other factors
      * @param blob - The blob to restore to
      */
     private static void restoreBlobContent(Blob blob) {
@@ -591,6 +678,7 @@ public class Repository {
         List<String> files = Utils.plainFilenamesIn(CWD);
         try {
             // Filter the FS and replace changed files with the ones in blobs
+            assert files != null;
             for (String filename : files) {
                 Blob currentBlob = new Blob(filename);
                 String otherSha1 = blobs.get(filename);

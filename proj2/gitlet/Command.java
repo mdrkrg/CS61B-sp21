@@ -62,6 +62,13 @@ public class Command {
         }
     }
 
+    /**
+     * Usage:
+     * 1. gitlet checkout -- [file name]
+     * 2. gitlet checkout [commit id] -- [file name]
+     * 3. gitlet checkout [branch name]
+     * @param args Commandline arguments
+     */
     static void checkout(String[] args) {
         final String sep = "--";
         try {
@@ -74,8 +81,9 @@ public class Command {
                     // Continue only when separator fit syntax
                     if (args[1].equals(sep)) {
                         final String fileName = args[2];
-                        // Repository.pickFile(fileName);
-                        throw new AssertionError("Not Implemented");
+                        Repository.restoreFile(fileName);
+                    } else {
+                        ErrorHandler.handleInvalidOperands();
                     }
                     break;
                 case 4:
@@ -83,9 +91,12 @@ public class Command {
                         // Continue only when separator fit syntax
                         final String commitID = args[1];
                         final String fileName = args[3];
-                        // Repository.pickFile(commitID, fileName);
-                        throw new AssertionError("Not Implemented");
+                        if (commitID.length() <= 40 && commitID.length() >= 5) {
+                            Repository.restoreFile(commitID, fileName);
+                            break;
+                        }
                     }
+                    ErrorHandler.handleInvalidOperands();
                     break;
                 default:
                     ErrorHandler.handleInvalidOperands();
