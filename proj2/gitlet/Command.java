@@ -126,6 +126,16 @@ public class Command {
         Repository.globalLog();
     }
 
+    static void find(String[] args) {
+        validateArgCount(args, 2);
+        String queryMsg = args[1];
+        try {
+            Repository.find(queryMsg);
+        } catch (GitletException e) {
+            ErrorHandler.handleGitletException(e);
+        }
+    }
+
 
     static void testHead() {
         System.out.println(Repository.getCurrentBranch());

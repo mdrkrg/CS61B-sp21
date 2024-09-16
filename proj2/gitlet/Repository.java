@@ -1,7 +1,5 @@
 package gitlet;
 
-import org.hamcrest.internal.ArrayIterator;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
@@ -200,9 +198,7 @@ public class Repository {
                 File logFile = Utils.join(LOGS_REFS_HEADS_DIR, filename);
                 String[] lines = Utils.readContentsAsString(logFile).split("\n");
                 for (int i = lines.length - 1; i >= 0; i--) {
-                    System.out.println("===");
-                    printLogText(lines[i]);
-                    System.out.println();
+                    printLogLineInfo(lines[i]);
                 }
             }
         } catch (IllegalArgumentException e) {
@@ -213,21 +209,57 @@ public class Repository {
     /**
      * Print a log string given a log line of text with the following format:
      * "[parent commit] [current commit] [timestamp] [commit message]"
-     *
+     * Runtime: O(1)
      * @param logFileLine - A line of text in the file logs/refs/heads/[branch]
      */
-    private static void printLogText(String logFileLine) {
+    private static void printLogLineInfo(String logFileLine) {
         String[] tokens = logFileLine.split(" ", 4);
         String commitSha1 = tokens[1];
         Date timestamp = new Date(Long.parseLong(tokens[2]));
         String commitMsg = tokens[3];
+        System.out.println("===");
         System.out.printf(
                 "commit %1$s\nDate: %2$ta %2$tb %2$td %2$tT %2$tY %2$tz\n%3$s\n",
                 commitSha1,
                 timestamp,
                 commitMsg
         );
+        System.out.println();
     }
+
+    /**
+     * Print the commit IDs that have the same commit message as [queryMsg],
+     * seperated by linebreaks.
+     * Runtime: O(N) with N total commits
+     * @param queryMsg - The message to find
+     * @throws GitletException - When no such commit with the same message exists
+     */
+    static void find(String queryMsg) throws GitletException {
+        List<String> logs = Utils.plainFilenamesIn(LOGS_REFS_HEADS_DIR);
+        boolean found = false;
+        assert logs != null;
+        try {
+            for (String filename: logs) {
+                File logFile = Utils.join(LOGS_REFS_HEADS_DIR, filename);
+                String[] lines = Utils.readContentsAsString(logFile).split("\n");
+                for (String line: lines) {
+                    String[] tokens = line.split(" ", 4);
+                    String commitID = tokens[1];
+                    String commitMsg = tokens[3];
+                    if (queryMsg.equals(commitMsg)) {
+                        System.out.println(commitID);
+                        found = true;
+                    }
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+        if (!found) {
+            throw new GitletException("Found no commit with that message.");
+        }
+    }
+
 
     static void createNewBranch(String name) throws GitletException {
         final File BRANCH_FILE = Utils.join(REFS_HEADS_DIR, name);
