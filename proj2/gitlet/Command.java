@@ -150,7 +150,11 @@ public class Command {
         validateArgCount(args, 2);
         String commitID = args[1];
         if (commitID.length() >= 5 && commitID.length() <= 40) {
-            Repository.reset(commitID);
+            try {
+                Repository.reset(commitID);
+            } catch (GitletException e) {
+                ErrorHandler.handleGitletException(e);
+            }
         } else {
             ErrorHandler.handleInvalidOperands();
         }

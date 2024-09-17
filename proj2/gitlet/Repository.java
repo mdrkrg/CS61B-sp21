@@ -10,8 +10,7 @@ import static gitlet.Utils.*;
 
 /**
  * Represents a gitlet repository.
- *  TODO: It's a good idea to give a description here of what else this Class
- *  does at a high level.
+ * Contains static methods for manipulating the files
  *
  * @author Crvena
  */
@@ -37,8 +36,6 @@ public class Repository {
     public static final File REFS_HEADS_DIR = join(GITLET_DIR, "refs", "heads");
 
     public static final String DEFAULT_BRANCH = "master";
-
-    /* TODO: fill in the rest of this class. */
 
     /**
      * Init the gitlet Repository
@@ -77,7 +74,6 @@ public class Repository {
      * @param filename file to be staged.
      */
     static void add(final String filename) {
-        // FIXME: When file change back, it's still in stage
         Commit staged = getStagedCommit();
         if (staged.readdFromRemoved(filename)) {
             // File already in REMOVED
@@ -818,8 +814,6 @@ public class Repository {
 
     /**
      * Restore all files to the according blobs
-     * TODO: Conditionally restore file if no difference,
-     *       may drop performance.
      * Runtime: O(N) with N files in CWD, require O(1) HashMap
      *
      * @param blobs - The Map of filename-blob to restore to

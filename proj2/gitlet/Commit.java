@@ -19,7 +19,7 @@ import java.io.Serializable;
  * <p>
  * When committing changes, it should be called with finalize(MESSAGE, TIME)
  *
- * @author TODO
+ * @author Crvena
  * @see Blob
  */
 public class Commit implements GitletObject {
@@ -63,7 +63,6 @@ public class Commit implements GitletObject {
     /**
      * Branch of the commit
      */
-    // TODO: Branching: One branch for one commit, easier to maintain
     private String branch;
     private boolean staged;
 
@@ -114,7 +113,6 @@ public class Commit implements GitletObject {
         this.timestamp = timestamp;
         this.sha1 = Utils.sha1(
                 Utils.serialize((Serializable) this.blobs),
-                // TODO: I don't like this shit
                 this.parent != null
                         ? this.parent.getSha1()
                         : "0000000000000000000000000000000000000000",
@@ -128,8 +126,6 @@ public class Commit implements GitletObject {
      * Create a Commit that is being staged
      * Every call to gitlet add will call addToStage
      */
-    // TODO: Handle branch, create an identical parent with different message,
-    //       and point the branched children to the new identical one.
     public static Commit createStagedCommit(Commit parent) {
         return new Commit(parent);
     }
@@ -174,13 +170,9 @@ public class Commit implements GitletObject {
         String filename = blob.getFilename();
         Blob stagedBlob = this.added.get(filename);
         String existingSha1 = this.blobs.get(filename);
-        // TODO: Class structure weird
         Blob existing = existingSha1 != null
                 ? Repository.readBlobObject(existingSha1) : null;
 
-        if (this.removed.remove(filename)) {
-
-        }
         if (stagedBlob == null || !blob.equals(stagedBlob)) {
             // Add only when
             // 1. file not found in stage
@@ -189,6 +181,7 @@ public class Commit implements GitletObject {
                 // Remove from staged
                 this.added.remove(filename);
             } else {
+                // Blob change, add to ADDED
                 this.added.put(filename, blob);
             }
             return true;
@@ -491,12 +484,6 @@ public class Commit implements GitletObject {
      */
     public final String getSha1() {
         return this.sha1;
-    }
-
-    @Override
-    public final String toString() {
-        // TODO:
-        return "";
     }
 
     /**

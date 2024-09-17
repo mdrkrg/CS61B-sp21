@@ -38,7 +38,6 @@ public class Main {
             case "find"       -> Command.find(args);
             case "rm-branch"  -> Command.rmBranch(args);
             case "reset"      -> Command.reset(args);
-            // TODO: FILL THE REST IN
             default           -> ErrorHandler.handleCommandNotFound();
         }
     }
