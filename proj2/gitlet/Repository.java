@@ -342,6 +342,25 @@ public class Repository {
         }
     }
 
+    static void reset(String commitID) throws GitletException {
+        // Throws "no commit exist" if not found
+        Commit commit = getCommit(commitID);
+        if (hasUnstagedChanges()) {
+            // FIXME: If a working file is untracked in the current branch
+            //        and WOULD BE OVERWRITTEN by the reset
+            throw new GitletException(
+                    "There is an untracked file in the way; delete it, or add and commit it first."
+            );
+        }
+        try{
+            writeCommitRef(getCurrentBranch(), commit);
+            // For log, simply don't update them
+            restoreToCommit(commit);
+            clearStageFile();
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
 
     static void printStatus() {
         printBranches();
@@ -636,7 +655,17 @@ public class Repository {
      * @throws IOException - When IO system fails
      */
     private static void writeCommitRef(Commit commit) throws IOException {
-        File refFile = Utils.join(REFS_HEADS_DIR, commit.getBranch());
+        writeCommitRef(commit.getBranch(), commit);
+    }
+
+    /**
+     * Write to .gitlet/refs/heads/BRANCH
+     * @param branch - Branch to write to
+     * @param commit - Commit to write
+     * @throws IOException - When IO system fails
+     */
+    private static void writeCommitRef(String branch, Commit commit) throws IOException {
+        File refFile = Utils.join(REFS_HEADS_DIR, branch);
         refFile.delete();
         refFile.createNewFile();
         Utils.writeContents(refFile, commit.getSha1());

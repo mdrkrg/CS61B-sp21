@@ -146,6 +146,15 @@ public class Command {
         }
     }
 
+    static void reset(String[] args) {
+        validateArgCount(args, 2);
+        String commitID = args[1];
+        if (commitID.length() >= 5 && commitID.length() <= 40) {
+            Repository.reset(commitID);
+        } else {
+            ErrorHandler.handleInvalidOperands();
+        }
+    }
 
     static void testHead() {
         System.out.println(Repository.getCurrentBranch());
