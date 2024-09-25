@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 
 import static gitlet.Utils.*;
@@ -358,6 +359,335 @@ public class Repository {
         }
     }
 
+    private static GitletException UnstagedChangesException() {
+        return new GitletException("There is an untracked file in the way; delete it, or add and commit it first.");
+    }
+
+    static void merge(String target) throws GitletException {
+        Commit staged = getStagedCommit();
+        if (staged.hasStagedChanges()) {
+            throw new GitletException("You have uncommitted changes.");
+        }
+
+        // If an untracked file in the current commit would be overwritten or deleted by the merge
+//        if (hasUnstagedChanges()) {
+//            throw new GitletException("There is an untracked file in the way; delete it, or add and commit it first.");
+//        }
+
+        String currentBranch = getCurrentBranch();
+        if (currentBranch.equals(target)) {
+            throw new GitletException("Cannot merge a branch with itself.");
+        }
+
+        Commit headCommit = getHeadCommit();
+        Commit targetCommit = getHeadCommit(target);
+        Commit commonAncestor = getCommonAncestor(currentBranch, target);
+
+        if (commonAncestor.equals(targetCommit)) {
+            throw new GitletException("Given branch is an ancestor of the current branch.");
+        }
+
+        // Fast forward
+        if (commonAncestor.equals(headCommit)) {
+            try {
+                writeCommitRef(currentBranch, targetCommit);
+                System.out.println("Current branch fast-forwarded.");
+            } catch (IOException e) {
+                ErrorHandler.handleJavaException(e);
+            }
+        }
+        clearStageFile();
+
+        // NOTE: staged stems from current branch
+        staged = getStagedCommit();
+
+        Map<String, String> splitBlobs  = commonAncestor.getAllBlobs();
+        Map<String, String> thisBlobs   = headCommit.getAllBlobs();
+        Map<String, String> targetBlobs = targetCommit.getAllBlobs();
+
+        HashSet<String> checkedFiles = new HashSet<>();
+
+        HashSet<String> cwdFiles = getCWDFiles();
+
+        // Now, the filename is part of blob sha1, so this can be some problem
+        for (Map.Entry<String, String> entry: splitBlobs.entrySet()) {
+            String splitBlobSha1 = entry.getValue();
+            String splitFilename = entry.getKey();
+
+            checkedFiles.add(splitFilename);
+            Blob splitBlob = readBlobObject(entry.getValue());
+
+            String targetBlobSha1 = targetBlobs.get(splitFilename);
+            String thisBlobSha1 = thisBlobs.get(splitFilename);
+
+            int status = getMergeStatus(splitBlobSha1, targetBlobSha1, thisBlobSha1);
+
+            switch (status) {
+                case 1 -> {
+                    // modified in the given branch,
+                    // but not modified in the current branch
+                    Blob targetBlob = readBlobObject(targetBlobSha1);
+                    testUnstaged(splitFilename, targetBlob, cwdFiles);
+                    // files should be checkouted and staged
+                    staged.addToStage(targetBlob);
+                }
+                case 2, 3, 7 -> {
+                    // 2: modified in the current branch
+                    // but not in the given branch
+                    // 3: both modified the same way
+                    // or both deleted
+                    // 7: present at the split point,
+                    // unmodified in the given branch,
+                    // and absent in the current branch
+                }
+                case 6 -> {
+                    // present at the split point,
+                    // unmodified in the current branch,
+                    // and absent in the given branch
+                    testUnstaged(splitFilename, splitBlob, cwdFiles);
+                    // should check unstaged first
+                    // should be removed (and untracked)
+                    staged.removeFromCommit(splitFilename);
+                    File file = new File(splitFilename);
+                    file.deleteOnExit();
+                }
+                case 8 -> {
+                    Blob thisBlob = readBlobObject(thisBlobSha1);
+                    testUnstaged(splitFilename, thisBlob, cwdFiles);
+                    // Write the diff file
+                    // TODO: Improve this
+                    File tmp = markDiff(splitFilename, thisBlobSha1, targetBlobSha1);
+                    Utils.writeContents(tmp, (Object) thisBlob.getData());
+                }
+            }
+        }
+
+        // case 5
+        for (Map.Entry<String, String> entry: targetBlobs.entrySet()) {
+            String targetFilename = entry.getKey();
+            String targetBlobSha1 = entry.getValue();
+            // not present at the split point
+            // are present only in the given branch
+            if (!checkedFiles.contains(targetFilename)
+                    && !thisBlobs.containsKey(targetFilename)) {
+                checkedFiles.add(targetFilename);
+                Blob targetBlob = readBlobObject(targetBlobSha1);
+                // files should be checkouted and staged
+                staged.addToStage(targetBlob);
+            }
+        }
+
+        // not present at the split point
+        // are present only in the current branch
+        // Nop
+        try {
+            // Move all tmp files to cwd
+            moveTmp();
+
+            // If merge would generate an error because the commit that it does has no changes in it,
+            // just let the normal commit error message for this go through.
+            String commitMessage = String.format("Merged %s into %s.", currentBranch, target);
+            commitMerge(staged, targetCommit, commitMessage);
+            removeTmp();
+        } catch (IOException e) {
+            restore();
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    private static void commitMerge(Commit staged, Commit targetCommit, String message) {
+        final String branch = getCurrentBranch();
+        if (!staged.hasStagedChanges()) {
+            throw new GitletException("No changes added to the commit.");
+        }
+        try {
+            Commit newCommit = Commit.finishCommit(staged, branch, message, new Date(), targetCommit);
+            for (Blob b : staged.getAddedBlobs()) {
+                writeBlobObject(b);
+            }
+            writeCommitFiles(newCommit);
+            clearStageFile();
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    /**
+     * Get the status code of one file in the split commit
+     * @param splitSha1 Sha1 of the blob in split commit
+     * @param targetSha1 Sha1 of the blob in target commit
+     * @param thisSha1 Sha1 of the blob in this commit
+     * @return Status code
+     */
+    private static int getMergeStatus(String splitSha1, String targetSha1, String thisSha1) {
+        assert splitSha1 != null;
+        if (targetSha1 == null && thisSha1 == null) {
+            // Both deleted
+            return 3;
+        }
+
+        if (targetSha1 == null && thisSha1.equals(splitSha1)) {
+            // present at the split point,
+            // unmodified in the current branch,
+            // and absent in the given branch
+            return 6;
+            // should check unstaged first
+            // should be removed (and untracked)
+        }
+
+        if (thisSha1 == null && targetSha1.equals(splitSha1)) {
+            // present at the split point,
+            // unmodified in the given branch,
+            // and absent in the current branch
+            return 7;
+            // should remain absent
+        }
+
+        if (targetSha1 != null && thisSha1 != null && targetSha1.equals(thisSha1)) {
+            // both modified the same way
+            return 3;
+            // should left unchanged
+        }
+
+        if (thisSha1 == null && targetSha1 != null && !targetSha1.equals(splitSha1)) {
+            // one is changed, other is modified
+            return 8;
+        }
+
+        if (targetSha1 == null && thisSha1 != null && !thisSha1.equals(splitSha1)) {
+            // one is changed, other is modified
+            return 8;
+        }
+
+        if (thisSha1.equals(splitSha1) && !targetSha1.equals(splitSha1)) {
+            // modified in the given branch,
+            // but not modified in the current branch
+            return 1;
+            // files should be checkouted and staged
+        }
+
+        if (!thisSha1.equals(splitSha1) && targetSha1.equals(splitSha1)) {
+            // modified in the current branch
+            // but not in the given branch
+            return 2;
+            // file should stay
+        }
+        if (targetSha1 != null && thisSha1 != null && !targetSha1.equals(thisSha1)) {
+            // modified differently
+            return 8;
+        }
+
+        // Other conditions
+        return 0;
+    }
+
+    private static final File tmpDir = Utils.join(GITLET_DIR, "tmp");
+
+    /**
+     * File in CWD should have no unstaged changes
+     * @param filename
+     * @param ourSha1
+     * @param theirSha1
+     * @return A tmpFile contains the diff result, should be deleted
+     */
+    private static File markDiff(String filename, String ourSha1, String theirSha1) {
+        if (!tmpDir.exists()) {
+            tmpDir.mkdir();
+        }
+        final File tmpFile = Utils.join(tmpDir, filename);
+        tmpFile.delete();
+        Blob our = readBlobObject(ourSha1);
+        Blob their = readBlobObject(ourSha1);
+        try {
+            tmpFile.createNewFile();
+            return tmpFile;
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+        throw new AssertionError("never reached");
+    }
+
+    static void removeTmp() {
+        if (!tmpDir.exists()) {
+            return;
+        }
+        List<String> tmpFiles = Utils.plainFilenamesIn(tmpDir);
+        if (tmpFiles == null) {
+            return;
+        }
+        for (String filename: tmpFiles) {
+            File file = Utils.join(tmpDir, filename);
+            file.delete();
+        }
+    }
+
+    private static void moveTmp() throws IOException {
+        if (!tmpDir.exists()) {
+            return;
+        }
+        List<String> tmpFiles = Utils.plainFilenamesIn(tmpDir);
+        if (tmpFiles == null) {
+            return;
+        }
+        for (String filename: tmpFiles) {
+            File tmp = Utils.join(tmpDir, filename);
+            File cur = Utils.join(CWD, filename);
+            Files.move(tmp.toPath(), cur.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        removeTmp();
+    }
+
+    static void restore() {
+        Commit commit = getHeadCommit();
+        for (String blobSha1 : commit.getAllBlobs().values()) {
+            restoreBlobContent(blobSha1);
+        }
+        removeTmp();
+        clearStageFile();
+    }
+
+    /**
+     * Given a filename, if it's in CWD
+     * test whether the blob in CWD is different from OTHER
+     * If true, throw UnstagedChangesException
+     * @param filename Filename to test
+     * @param other The blob to compare
+     */
+    private static void testUnstaged(String filename, Blob other, HashSet<String> cwdFiles) throws GitletException {
+        // Check if the file is unstaged modified
+        if (cwdFiles.contains(filename)) try {
+            Blob cwdBlob = new Blob(filename);
+            if (!cwdBlob.equals(other)) {
+                throw UnstagedChangesException();
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    private static Commit getCommonAncestor(String current, String other) throws GitletException {
+        if (current.equals(other)) {
+            return getHeadCommit(current);
+        }
+        Commit currentCommit = getHeadCommit(current);
+        Commit otherCommit = getHeadCommit(other);
+        HashSet<Commit> commits = new HashSet<>();
+        // First, build a set contains all parents of current
+        // O(N)
+        for (Commit tmp = currentCommit; tmp != null; tmp = tmp.getParent()) {
+            commits.add(tmp);
+        }
+        // Then, get the last commit in other's parents that is in
+        // O(NlogN) in total
+        for (Commit tmp = otherCommit; tmp != null; tmp = tmp.getParent()) {
+            // O(logN)
+            if (commits.contains(tmp)) {
+                return tmp;
+            }
+        }
+        throw new RuntimeException("should never happen");
+    }
+
     static void printStatus() {
         printBranches();
         Commit staged = getStagedCommit();
@@ -602,7 +932,7 @@ public class Repository {
         }
     }
 
-    private static void clearStageFile() {
+    static void clearStageFile() {
         STAGE_FILE.delete();
     }
 
@@ -848,6 +1178,21 @@ public class Repository {
         } catch (GitletException e) {
             ErrorHandler.handleGitletException(e);
         }
+    }
+
+    /**
+     * Return a hashset containing all filenames of CWD
+     * @return Hashset, empty if Utils return null
+     */
+    private static HashSet<String> getCWDFiles() {
+        List<String> files = Utils.plainFilenamesIn(CWD);
+        HashSet<String> set;
+        if (files != null) {
+            set = new HashSet<>(files);
+        } else {
+            set = new HashSet<>();
+        }
+        return set;
     }
 
     /**

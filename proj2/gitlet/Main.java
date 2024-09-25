@@ -38,6 +38,7 @@ public class Main {
             case "find"       -> Command.find(args);
             case "rm-branch"  -> Command.rmBranch(args);
             case "reset"      -> Command.reset(args);
+            case "merge"      -> Command.merge(args);
             default           -> ErrorHandler.handleCommandNotFound();
         }
     }

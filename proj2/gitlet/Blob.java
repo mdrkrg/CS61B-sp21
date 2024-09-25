@@ -47,6 +47,10 @@ public class Blob implements GitletObject {
         return this.sha1.equals(other.sha1);
     }
 
+    public int hashCode() {
+        return sha1.hashCode();
+    }
+
     @Override
     public final String toString() {
         return this.filename + " - " + this.sha1;

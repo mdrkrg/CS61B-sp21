@@ -35,6 +35,7 @@ public class Commit implements GitletObject {
      * Parent(s) of the commit
      */
     private final Commit parent;
+    private final Commit mergedParent;
     /**
      * The name-blobsha1 pairs in this Commit.
      */
@@ -74,6 +75,7 @@ public class Commit implements GitletObject {
         this.added = new HashMap<>();
         this.removed = new HashSet<>();
         this.parent = null;
+        this.mergedParent= null;
     }
 
     /**
@@ -85,6 +87,7 @@ public class Commit implements GitletObject {
         this.added = new HashMap<>();
         this.removed = new HashSet<>();
         this.parent = parent;
+        this.mergedParent= null;
         this.branch = "staged";
         this.sha1 = "0000000000000000000000000000000000000000";
         this.staged = true;
@@ -99,7 +102,7 @@ public class Commit implements GitletObject {
      * @param message   - The commit message of the commit
      * @param timestamp - The timestamp of the commit
      */
-    private Commit(Commit staged, String branch, String message, Date timestamp) {
+    private Commit(Commit staged, String branch, String message, Date timestamp, Commit target) {
         this.blobs = new HashMap<>(staged.blobs);
         for (String name : staged.removed) {
             this.blobs.remove(name);
@@ -108,6 +111,7 @@ public class Commit implements GitletObject {
             this.blobs.put(entry.getKey(), entry.getValue().getSha1());
         }
         this.parent = staged.parent;
+        this.mergedParent= target;
         this.branch = branch;
         this.message = message;
         this.timestamp = timestamp;
@@ -130,14 +134,37 @@ public class Commit implements GitletObject {
         return new Commit(parent);
     }
 
+
+    /**
+     * Finish a commit with no parent
+     */
+    public static Commit finishCommit(
+            Commit staged, String branch, String message, Date timestamp
+    ) {
+        return new Commit(staged, branch, message, timestamp, null);
+    }
+
     /**
      * Create a Commit that will not be changed.
      * Created on `gitlet commit`
      */
     public static Commit finishCommit(
-            Commit staged, String branch, String message, Date timestamp
+            Commit staged, String branch, String message, Date timestamp, Commit target
     ) {
-        return new Commit(staged, branch, message, timestamp);
+        return new Commit(staged, branch, message, timestamp, target);
+    }
+
+    public boolean equals(Object other) {
+        if (other instanceof Commit) {
+            if (((Commit) other).sha1.equals(this.sha1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public int hashCode() {
+        return sha1.hashCode();
     }
 
 

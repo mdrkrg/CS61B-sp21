@@ -1,5 +1,7 @@
 package gitlet;
 
+import java.io.IOException;
+
 public class Command {
     static void init() {
         Repository.init();
@@ -157,6 +159,17 @@ public class Command {
             }
         } else {
             ErrorHandler.handleInvalidOperands();
+        }
+    }
+
+    static void merge(String[] args) {
+        validateArgCount(args, 2);
+        String target = args[1];
+        try {
+            Repository.merge(target);
+        } catch (GitletException e) {
+            Repository.restore();
+            ErrorHandler.handleGitletException(e);
         }
     }
 
