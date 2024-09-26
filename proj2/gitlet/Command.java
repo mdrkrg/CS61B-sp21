@@ -1,7 +1,5 @@
 package gitlet;
 
-import java.io.IOException;
-
 public class Command {
     static void init() {
         Repository.init();

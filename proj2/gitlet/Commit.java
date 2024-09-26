@@ -75,7 +75,7 @@ public class Commit implements GitletObject {
         this.added = new HashMap<>();
         this.removed = new HashSet<>();
         this.parent = null;
-        this.mergedParent= null;
+        this.mergedParent = null;
     }
 
     /**
@@ -87,7 +87,7 @@ public class Commit implements GitletObject {
         this.added = new HashMap<>();
         this.removed = new HashSet<>();
         this.parent = parent;
-        this.mergedParent= null;
+        this.mergedParent = null;
         this.branch = "staged";
         this.sha1 = "0000000000000000000000000000000000000000";
         this.staged = true;
@@ -111,7 +111,7 @@ public class Commit implements GitletObject {
             this.blobs.put(entry.getKey(), entry.getValue().getSha1());
         }
         this.parent = staged.parent;
-        this.mergedParent= target;
+        this.mergedParent = target;
         this.branch = branch;
         this.message = message;
         this.timestamp = timestamp;
@@ -325,11 +325,9 @@ public class Commit implements GitletObject {
      * @return true on new, false otherwise
      */
     public final boolean isFileNew(String filename) {
-        return (
-                this.removed.contains(filename)
-                        || (!this.added.containsKey(filename)
-                        && !this.blobs.containsKey(filename))
-        );
+        return (this.removed.contains(filename)
+                || (!this.added.containsKey(filename)
+                && !this.blobs.containsKey(filename)));
     }
 
     /**
@@ -356,9 +354,9 @@ public class Commit implements GitletObject {
         return this.blobs;
     }
 
-    public void updateBlobs(Map<String, String> blobs) {
+    public void updateBlobs(Map<String, String> otherBlobs) {
         assert this.staged;
-        this.blobs = blobs;
+        this.blobs = otherBlobs;
     }
 
     /**
