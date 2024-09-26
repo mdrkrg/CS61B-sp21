@@ -383,6 +383,11 @@ public class Repository {
             throw new GitletException("Cannot merge a branch with itself.");
         }
 
+        final File BRANCH_FILE = Utils.join(REFS_HEADS_DIR, target);
+        if (!BRANCH_FILE.exists()) {
+            throw new GitletException("A branch with that name does not exist.");
+        }
+
         Commit headCommit = getHeadCommit();
         Commit targetCommit = getHeadCommit(target);
         Commit commonAncestor = getCommonAncestor(currentBranch, target);
@@ -500,7 +505,7 @@ public class Repository {
 
             // If merge would generate an error because the commit that it does has no changes in it,
             // just let the normal commit error message for this go through.
-            String commitMessage = String.format("Merged %s into %s.", currentBranch, target);
+            String commitMessage = String.format("Merged %s into %s.", target, currentBranch);
             commitMerge(staged, targetCommit, commitMessage);
             removeTmp();
         } catch (IOException e) {
