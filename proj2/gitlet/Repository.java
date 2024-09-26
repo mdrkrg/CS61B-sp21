@@ -161,7 +161,10 @@ public class Repository {
         try {
             Commit newCommit = Commit.finishCommit(staged, branch, message, new Date());
             for (Blob b : staged.getAddedBlobs()) {
-                writeBlobObject(b);
+                try {
+                    writeBlobObject(b);
+                    // Ignore hash collision
+                } catch (GitletException e) {}
             }
             writeCommitFiles(newCommit);
             clearStageFile();
@@ -334,6 +337,7 @@ public class Repository {
             Commit branchHead = getHeadCommit(name);
             restoreToCommit(branchHead);
             updateRootHead(name);
+            updateStageFileTo(name);
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         }
@@ -431,6 +435,7 @@ public class Repository {
                         Blob targetBlob = readBlobObject(targetBlobSha1);
                         testUnstaged(splitFilename, splitBlob, cwdFiles);
                         // files should be checkouted and staged
+                        restoreBlobContent(targetBlob);
                         staged.addToStage(targetBlob);
                     }
                     case 2, 3, 7 -> {
@@ -451,7 +456,7 @@ public class Repository {
                         // should be removed (and untracked)
                         staged.removeFromCommit(splitFilename);
                         File file = new File(splitFilename);
-                        file.deleteOnExit();
+                        file.delete();
                     }
                     case 8 -> {
                         Blob thisBlob = readBlobObject(thisBlobSha1);
@@ -475,6 +480,7 @@ public class Repository {
                     checkedFiles.add(targetFilename);
                     Blob targetBlob = readBlobObject(targetBlobSha1);
                     // files should be checkouted and staged
+                    restoreBlobContent(targetBlob);
                     staged.addToStage(targetBlob);
                 }
             }
@@ -956,6 +962,13 @@ public class Repository {
 
     static void clearStageFile() {
         STAGE_FILE.delete();
+    }
+
+    private static void updateStageFileTo(String branch) {
+        Commit stage = getStagedCommit();
+        Commit headCommit = getHeadCommit(branch);
+        stage.updateBlobs(headCommit.getAllBlobs());
+        writeStageFile(stage);
     }
 
     /**

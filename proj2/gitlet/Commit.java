@@ -356,6 +356,11 @@ public class Commit implements GitletObject {
         return this.blobs;
     }
 
+    public void updateBlobs(Map<String, String> blobs) {
+        assert this.staged;
+        this.blobs = blobs;
+    }
+
     /**
      * Given a collection of files, return a set of unstaged files,
      * with filename mapped to their reason for being unstaged.
