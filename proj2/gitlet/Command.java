@@ -168,7 +168,6 @@ public class Command {
         try {
             Repository.merge(target);
         } catch (GitletException e) {
-            Repository.restore();
             ErrorHandler.handleGitletException(e);
         }
     }

@@ -387,11 +387,12 @@ public class Repository {
             throw new GitletException("Given branch is an ancestor of the current branch.");
         }
 
-        // Fast forward
+        // Fast-forward
         if (commonAncestor.equals(headCommit)) {
             try {
                 writeCommitRef(currentBranch, targetCommit);
                 System.out.println("Current branch fast-forwarded.");
+                return;
             } catch (IOException e) {
                 ErrorHandler.handleJavaException(e);
             }
@@ -401,8 +402,8 @@ public class Repository {
         // NOTE: staged stems from current branch
         staged = getStagedCommit();
 
-        Map<String, String> splitBlobs  = commonAncestor.getAllBlobs();
-        Map<String, String> thisBlobs   = headCommit.getAllBlobs();
+        Map<String, String> splitBlobs = commonAncestor.getAllBlobs();
+        Map<String, String> thisBlobs = headCommit.getAllBlobs();
         Map<String, String> targetBlobs = targetCommit.getAllBlobs();
 
         HashSet<String> checkedFiles = new HashSet<>();
@@ -410,72 +411,79 @@ public class Repository {
         HashSet<String> cwdFiles = getCWDFiles();
 
         // Now, the filename is part of blob sha1, so this can be some problem
-        for (Map.Entry<String, String> entry: splitBlobs.entrySet()) {
-            String splitBlobSha1 = entry.getValue();
-            String splitFilename = entry.getKey();
+        try {
+            for (Map.Entry<String, String> entry : splitBlobs.entrySet()) {
+                String splitBlobSha1 = entry.getValue();
+                String splitFilename = entry.getKey();
 
-            checkedFiles.add(splitFilename);
-            Blob splitBlob = readBlobObject(entry.getValue());
+                checkedFiles.add(splitFilename);
+                Blob splitBlob = readBlobObject(entry.getValue());
 
-            String targetBlobSha1 = targetBlobs.get(splitFilename);
-            String thisBlobSha1 = thisBlobs.get(splitFilename);
+                String targetBlobSha1 = targetBlobs.get(splitFilename);
+                String thisBlobSha1 = thisBlobs.get(splitFilename);
 
-            int status = getMergeStatus(splitBlobSha1, targetBlobSha1, thisBlobSha1);
+                int status = getMergeStatus(splitBlobSha1, targetBlobSha1, thisBlobSha1);
 
-            switch (status) {
-                case 1 -> {
-                    // modified in the given branch,
-                    // but not modified in the current branch
+                switch (status) {
+                    case 1 -> {
+                        // modified in the given branch,
+                        // but not modified in the current branch
+                        Blob targetBlob = readBlobObject(targetBlobSha1);
+                        testUnstaged(splitFilename, splitBlob, cwdFiles);
+                        // files should be checkouted and staged
+                        staged.addToStage(targetBlob);
+                    }
+                    case 2, 3, 7 -> {
+                        // 2: modified in the current branch
+                        // but not in the given branch
+                        // 3: both modified the same way
+                        // or both deleted
+                        // 7: present at the split point,
+                        // unmodified in the given branch,
+                        // and absent in the current branch
+                    }
+                    case 6 -> {
+                        // present at the split point,
+                        // unmodified in the current branch,
+                        // and absent in the given branch
+                        testUnstaged(splitFilename, splitBlob, cwdFiles);
+                        // should check unstaged first
+                        // should be removed (and untracked)
+                        staged.removeFromCommit(splitFilename);
+                        File file = new File(splitFilename);
+                        file.deleteOnExit();
+                    }
+                    case 8 -> {
+                        Blob thisBlob = readBlobObject(thisBlobSha1);
+                        testUnstaged(splitFilename, thisBlob, cwdFiles);
+                        // Write the diff file
+                        // TODO: Improve this
+                        File tmp = markDiff(splitFilename, thisBlobSha1, targetBlobSha1);
+                        Utils.writeContents(tmp, (Object) thisBlob.getData());
+                    }
+                }
+            }
+
+            // case 5
+            for (Map.Entry<String, String> entry : targetBlobs.entrySet()) {
+                String targetFilename = entry.getKey();
+                String targetBlobSha1 = entry.getValue();
+                // not present at the split point
+                // are present only in the given branch
+                if (!checkedFiles.contains(targetFilename)
+                        && !thisBlobs.containsKey(targetFilename)) {
+                    checkedFiles.add(targetFilename);
                     Blob targetBlob = readBlobObject(targetBlobSha1);
-                    testUnstaged(splitFilename, targetBlob, cwdFiles);
                     // files should be checkouted and staged
                     staged.addToStage(targetBlob);
                 }
-                case 2, 3, 7 -> {
-                    // 2: modified in the current branch
-                    // but not in the given branch
-                    // 3: both modified the same way
-                    // or both deleted
-                    // 7: present at the split point,
-                    // unmodified in the given branch,
-                    // and absent in the current branch
-                }
-                case 6 -> {
-                    // present at the split point,
-                    // unmodified in the current branch,
-                    // and absent in the given branch
-                    testUnstaged(splitFilename, splitBlob, cwdFiles);
-                    // should check unstaged first
-                    // should be removed (and untracked)
-                    staged.removeFromCommit(splitFilename);
-                    File file = new File(splitFilename);
-                    file.deleteOnExit();
-                }
-                case 8 -> {
-                    Blob thisBlob = readBlobObject(thisBlobSha1);
-                    testUnstaged(splitFilename, thisBlob, cwdFiles);
-                    // Write the diff file
-                    // TODO: Improve this
-                    File tmp = markDiff(splitFilename, thisBlobSha1, targetBlobSha1);
-                    Utils.writeContents(tmp, (Object) thisBlob.getData());
-                }
             }
+        } catch (GitletException e) {
+            // When bad things happen, restore stuff
+            restoreRefHead(currentBranch, headCommit);
+            restoreWorkspace(headCommit);
         }
 
-        // case 5
-        for (Map.Entry<String, String> entry: targetBlobs.entrySet()) {
-            String targetFilename = entry.getKey();
-            String targetBlobSha1 = entry.getValue();
-            // not present at the split point
-            // are present only in the given branch
-            if (!checkedFiles.contains(targetFilename)
-                    && !thisBlobs.containsKey(targetFilename)) {
-                checkedFiles.add(targetFilename);
-                Blob targetBlob = readBlobObject(targetBlobSha1);
-                // files should be checkouted and staged
-                staged.addToStage(targetBlob);
-            }
-        }
 
         // not present at the split point
         // are present only in the current branch
@@ -490,7 +498,8 @@ public class Repository {
             commitMerge(staged, targetCommit, commitMessage);
             removeTmp();
         } catch (IOException e) {
-            restore();
+            restoreRefHead(currentBranch, headCommit);
+            restoreWorkspace(headCommit);
             ErrorHandler.handleJavaException(e);
         }
     }
@@ -503,7 +512,9 @@ public class Repository {
         try {
             Commit newCommit = Commit.finishCommit(staged, branch, message, new Date(), targetCommit);
             for (Blob b : staged.getAddedBlobs()) {
-                writeBlobObject(b);
+                try {
+                    writeBlobObject(b);
+                } catch (GitletException e) {}
             }
             writeCommitFiles(newCommit);
             clearStageFile();
@@ -637,8 +648,19 @@ public class Repository {
         removeTmp();
     }
 
-    static void restore() {
-        Commit commit = getHeadCommit();
+    static void restoreRefHead(String branch, Commit commit) {
+        try {
+            writeCommitRef(branch, commit);
+        } catch (IOException e) {
+//            restoreRefHead(branch, commit);
+            ErrorHandler.handleJavaException(e);
+        }
+    }
+
+    /**
+     * Restore a Gitlet workspace given the head commit
+     */
+    static void restoreWorkspace(Commit commit) {
         for (String blobSha1 : commit.getAllBlobs().values()) {
             restoreBlobContent(blobSha1);
         }
