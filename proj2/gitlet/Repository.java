@@ -328,11 +328,12 @@ public class Repository {
             throw new GitletException("No such branch exists.");
         }
 
-        if (hasUnstagedChanges()) {
-            throw new GitletException(
-                    "There is an untracked file in the way; delete it, or add and commit it first."
-            );
-        }
+//        if (hasUnstagedChanges()) {
+//            throw new GitletException(
+//                    "There is an untracked file in the way; delete it, or add and commit it first."
+//            );
+//        }
+        List<Blob> snapshot = snapshotWorkspace();
         try {
             Commit branchHead = getHeadCommit(name);
             restoreToCommit(branchHead);
@@ -340,19 +341,24 @@ public class Repository {
             updateStageFileTo(name);
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
+        } catch (GitletException e) {
+            Commit currentCommit = getHeadCommit();
+            restoreWorkspace(snapshot);
+            throw e;
         }
     }
 
     static void reset(String commitID) throws GitletException {
         // Throws "no commit exist" if not found
         Commit commit = getCommit(commitID);
-        if (hasUnstagedChanges()) {
-            // FIXME: If a working file is untracked in the current branch
-            //        and WOULD BE OVERWRITTEN by the reset
-            throw new GitletException(
-                    "There is an untracked file in the way; delete it, or add and commit it first."
-            );
-        }
+//        if (hasUnstagedChanges()) {
+//            // If a working file is untracked in the current branch
+//            //        and WOULD BE OVERWRITTEN by the reset
+//            throw new GitletException(
+//                    "There is an untracked file in the way; delete it, or add and commit it first."
+//            );
+//        }
+        List<Blob> snapshot = snapshotWorkspace();
         try{
             writeCommitRef(getCurrentBranch(), commit);
             // For log, simply don't update them
@@ -360,6 +366,10 @@ public class Repository {
             clearStageFile();
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
+        } catch (GitletException e) {
+            Commit currentCommit = getHeadCommit();
+            restoreWorkspace(snapshot);
+            throw e;
         }
     }
 
@@ -399,6 +409,7 @@ public class Repository {
         // Fast-forward
         if (commonAncestor.equals(headCommit)) {
             try {
+                restoreToCommit(targetCommit);
                 writeCommitRef(currentBranch, targetCommit);
                 System.out.println("Current branch fast-forwarded.");
                 return;
@@ -418,6 +429,8 @@ public class Repository {
         HashSet<String> checkedFiles = new HashSet<>();
 
         HashSet<String> cwdFiles = getCWDFiles();
+
+        List<Blob> snapshot = snapshotWorkspace();
 
         // Now, the filename is part of blob sha1, so this can be some problem
         try {
@@ -492,7 +505,7 @@ public class Repository {
         } catch (GitletException e) {
             // When bad things happen, restore stuff
             restoreRefHead(currentBranch, headCommit);
-            restoreWorkspace(headCommit);
+            restoreWorkspace(snapshot);
         }
 
 
@@ -510,7 +523,7 @@ public class Repository {
             removeTmp();
         } catch (IOException e) {
             restoreRefHead(currentBranch, headCommit);
-            restoreWorkspace(headCommit);
+            restoreWorkspace(snapshot);
             ErrorHandler.handleJavaException(e);
         }
     }
@@ -668,12 +681,27 @@ public class Repository {
         }
     }
 
+    private static List<Blob> snapshotWorkspace() {
+        List<Blob> snapshot = new ArrayList<>();
+        HashSet<String> files = getCWDFiles();
+        try {
+            for (String file: files) {
+                Blob blob = new Blob(file);
+                snapshot.add(blob);
+            }
+        } catch (IOException e) {
+            ErrorHandler.handleJavaException(e);
+        }
+        return snapshot;
+    }
+
     /**
      * Restore a Gitlet workspace given the head commit
+     * @param snapshot A list of blobs in the cwd
      */
-    static void restoreWorkspace(Commit commit) {
-        for (String blobSha1 : commit.getAllBlobs().values()) {
-            restoreBlobContent(blobSha1);
+    static void restoreWorkspace(List<Blob> snapshot) {
+        for (Blob blob: snapshot) {
+            restoreBlobContent(blob);
         }
         removeTmp();
         clearStageFile();
@@ -1187,20 +1215,37 @@ public class Repository {
      * Runtime: O(N) with N files in CWD, require O(1) HashMap
      *
      * @param blobs - The Map of filename-blob to restore to
+     * @throws GitletException When there's an unstaged file
+     * This exception should be caught and handled
      */
-    private static void restoreAllFiles(Map<String, String> blobs) {
-        List<String> files = Utils.plainFilenamesIn(CWD);
+    private static void restoreAllFiles(Map<String, String> blobs) throws GitletException {
+        HashSet<String> files = getCWDFiles();
+        Commit headCommit = getHeadCommit();
         try {
             // Filter the FS and replace changed files with the ones in blobs
-            assert files != null;
             for (String filename : files) {
-                Blob currentBlob = new Blob(filename);
+                Blob cwdBlob = new Blob(filename);
                 String otherSha1 = blobs.get(filename);
+                String thisSha1 = headCommit.getBlobSha1(filename);
+                Blob thisBlob = thisSha1 != null ? readBlobObject(thisSha1) : null;
                 if (otherSha1 == null) {
-                    File currentFile = new File(filename);
-                    // TODO: Do not delete staged files (extra)
-                    currentFile.delete();
-                } else if (!otherSha1.equals(currentBlob.getSha1())) {
+                    // File doesn't exist in BLOBS
+                    // If this file doesn't exist in head,
+                    // Then it is an unstaged file (remain)
+                    // Else it should be restored
+                    if (thisBlob != null) {
+                        File currentFile = new File(filename);
+                        // TODO: Do not delete staged files (extra)
+                        // First test if the file is unstaged
+                        testUnstaged(filename, thisBlob, files);
+                        // Then delete current file
+                        currentFile.delete();
+                    }
+                } else if (!otherSha1.equals(cwdBlob.getSha1())) {
+                    // File is modified in BLOBS
+                    // First test if the file is unstaged
+                    testUnstaged(filename, thisBlob, files);
+                    // Then restore the blob
                     restoreBlobContent(otherSha1);
                 }
             }
@@ -1216,6 +1261,9 @@ public class Repository {
         } catch (IOException e) {
             ErrorHandler.handleJavaException(e);
         } catch (GitletException e) {
+            if (e.getMessage().equals(Errors.ERR_UNSTAGED)) {
+                throw e;
+            }
             ErrorHandler.handleGitletException(e);
         }
     }
@@ -1340,8 +1388,9 @@ public class Repository {
      * Update the working directory with the blobs in the COMMIT
      *
      * @param commit the commit to restore to
+     * @throws GitletException When there's an unstaged file that will be overwritten
      */
-    private static void restoreToCommit(Commit commit) {
+    private static void restoreToCommit(Commit commit) throws GitletException {
         restoreAllFiles(commit.getAllBlobs());
     }
 
