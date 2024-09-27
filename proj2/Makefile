@@ -45,7 +45,7 @@ executable:
 	jar $(JARFLAGS) $(JARFILE) $(ENTRYPOINT) $(CLASSES)
 	echo $(SHEBANG) > $(EXEC)
 	cat $(JARFILE) >> $(EXEC)
-	rm -f $(JARFILE)
+#	rm -f $(JARFILE)
 	chmod +x $(EXEC)
 
 check: default
