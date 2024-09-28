@@ -494,6 +494,13 @@ public class Commit implements GitletObject {
     }
 
     /**
+     * @return second parent of this commit
+     */
+    public Commit getMergedParent() {
+        return this.mergedParent;
+    }
+
+    /**
      * @return message of this commit
      */
     public final String getMessage() {

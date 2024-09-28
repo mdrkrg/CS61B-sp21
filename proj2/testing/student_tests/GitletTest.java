@@ -3,7 +3,10 @@ package testing.student_tests;
 import static org.junit.Assert.*;
 
 import gitlet.Repository;
+import gitlet.*;
 import org.junit.Test;
+
+import java.io.IOException;
 
 public class GitletTest {
   /** @Test
@@ -28,4 +31,27 @@ public class GitletTest {
     status = Repository.getMergeStatus("1", null, "3");
     assertEquals(8, status);
   } */
+
+  /**
+   * Run the script test_multiple_parents.sh first, then use this test
+   */
+
+  static final String WORKING_DIR = "/home/crvena/Learning/CS61B/repo-21/proj2/testing/student_tests/";
+  static final String TESTING_DIR = "/home/crvena/Learning/CS61B/repo-21/proj2/testing/student_tests/gittest/";
+
+  /**
+   * Test the new implementation of method Repository.getCommonAncestor
+   */
+  @Test
+  public void testCommonAncestorNew() {
+    System.setProperty("user.dir", WORKING_DIR);
+    try {
+      Runtime.getRuntime().exec(new String[]{"zsh", "-c", "./test_parents_pre.sh"});
+      System.setProperty("user.dir", TESTING_DIR);
+      Commit ancestor = Repository.getCommonAncestor("B1", "B2");
+      assertEquals("f.txt added", ancestor.getMessage());
+    } catch (IOException e) {
+      System.err.println(e.getMessage());
+    }
+  }
 }
